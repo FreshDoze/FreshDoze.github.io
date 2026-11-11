@@ -22,6 +22,7 @@ jobs:
       - name: Fetch published CSV and update data.json
         env:
           SHEET_CSV_URL: ${{ vars.SHEET_CSV_URL }}
+          SHEET_CONTENT_CSV_URL: ${{ vars.SHEET_CONTENT_CSV_URL }}
         run: node scripts/update.mjs
 
       - name: Commit changes
