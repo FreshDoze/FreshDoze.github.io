@@ -358,10 +358,18 @@
   function updateCartUI() {
     const count = cartCount();
     const total = cartTotal();
-    $('cartCount').textContent = count;
-    $('cartBarCount').textContent = count;
-    $('cartBarTotal').textContent = money(total);
-    $('cartBar').hidden = count === 0;
+    const badge = $('cartCount');
+    const sum = $('cartSum');
+    const btn = $('cartBtn');
+    badge.textContent = count;
+    btn.dataset.empty = count === 0 ? '1' : '0';
+    if (count > 0) {
+      sum.textContent = money(total);
+      sum.hidden = false;
+    } else {
+      sum.textContent = '';
+      sum.hidden = true;
+    }
     if ($('cartDialog').open) renderCart();
     const has = state.cart.length > 0;
     $('copyOrder').disabled = !has;
@@ -536,7 +544,6 @@
     $('closeProduct').addEventListener('click', () => closeDialog($('productDialog')));
     $('closeCart').addEventListener('click', () => closeDialog($('cartDialog')));
     $('cartBtn').addEventListener('click', openCart);
-    $('cartBarBtn').addEventListener('click', openCart);
     $('productDialog').addEventListener('click', (e) => { if (e.target === $('productDialog')) closeDialog($('productDialog')); });
     $('cartDialog').addEventListener('click', (e) => { if (e.target === $('cartDialog')) closeDialog($('cartDialog')); });
     $('productDialog').addEventListener('close', () => document.body.classList.remove('locked'));
