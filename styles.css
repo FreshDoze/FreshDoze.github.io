@@ -350,9 +350,11 @@ dialog::backdrop{background:rgba(28,25,23,.48)}
   .search{height:46px}
   .cats{gap:17px;margin-top:14px}
   .cat{font-size:9.5px;letter-spacing:.09em}
-  .filters{gap:9px;margin-top:13px}
-  .field{flex:1;min-width:0}
-  .field select{width:100%;font-size:13px}
+  .filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:13px}
+  .field{min-width:0}
+  .field:last-child{grid-column:1 / -1}
+  .result-line{grid-column:1 / -1;width:auto;margin-left:0;padding-top:2px}
+  .field select{width:100%;font-size:13px;text-overflow:ellipsis}
   .result-line{width:100%;margin-left:0;padding:4px 0 0;justify-content:space-between;font-size:10px}
   .active-filters{margin-top:12px;gap:8px}
   .chip{height:26px;font-size:10px;padding:0 8px}

@@ -18,6 +18,7 @@
   const searchInput = $('searchInput');
   const clearSearch = $('clearSearch');
   const brandFilter = $('brandFilter');
+  const typeFilter = $('typeFilter');
   const sortFilter = $('sortFilter');
   const cats = $('cats');
   const toastEl = $('toast');
@@ -28,6 +29,7 @@
     demo: false,
     query: '',
     cat: 'all',
+    type: 'all',
     brand: 'all',
     sort: 'curated',
     limit: PAGE,
@@ -38,13 +40,12 @@
     content: { e: [], byArt: {}, byName: {} }
   };
 
+  const GENDERS = ['Чоловічі', 'Жіночі', 'Унісекс'];
   const CATS = [
     ['all', 'Всі'],
     ['Чоловічі', 'Чоловічі'],
     ['Жіночі', 'Жіночі'],
-    ['Нішеві', 'Нішеві'],
-    ['Арабські', 'Арабські'],
-    ['Інше', 'Інше']
+    ['Унісекс', 'Унісекс']
   ];
 
   function esc(s) {
@@ -139,15 +140,19 @@
         .map((p, i) => {
           const c = contentFor(p) || {};
           p = { ...p, aroma: cleanAroma(p.brand, p.aroma) };
+          const cat = p.gender || c.category || '';
+          const gender = GENDERS.includes(cat) ? cat : (cat ? 'Унісекс' : '');
+          const type = p.type || (cat === 'Нішеві' ? 'Нішеві' : cat === 'Арабські' ? 'Арабські' : 'Люкс');
           return {
             ...p,
             _id: i,
-            _cat: c.category || 'Інше',
+            _cat: gender,
+            _type: type,
+            _desc: p.desc || c.desc || '',
+            _tg: safeUrl(p.tg, safeUrl(c.telegram, TG)),
             _image: c.image || '',
-            _desc: c.desc || '',
-            _tg: safeUrl(c.telegram, TG),
             _docName: c.docName || '',
-            _search: norm([p.brand, p.aroma, c.docName, c.category].join(' '))
+            _search: norm([p.brand, p.aroma, c.docName, gender, type].join(' '))
           };
         });
       state.cart = loadCart();
@@ -197,6 +202,7 @@
     const q = norm(state.query);
     let list = state.products;
     if (state.cat !== 'all') list = list.filter((p) => p._cat === state.cat);
+    if (state.type !== 'all') list = list.filter((p) => p._type === state.type);
     if (state.brand !== 'all') list = list.filter((p) => p.brand === state.brand);
     if (q) list = list.filter((p) => p._search.includes(q));
     if (state.sort === 'curated') list = list.slice().sort((a, b) => ((b._image ? 1 : 0) - (a._image ? 1 : 0)) || (hash(a.brand + a.aroma) - hash(b.brand + b.aroma)));
@@ -211,7 +217,8 @@
   function filterState() {
     const out = [];
     if (state.query) out.push({ key: 'query', label: 'Пошук', value: state.query });
-    if (state.cat !== 'all') out.push({ key: 'cat', label: 'Категорія', value: state.cat });
+    if (state.cat !== 'all') out.push({ key: 'cat', label: 'Стать', value: state.cat });
+    if (state.type !== 'all') out.push({ key: 'type', label: 'Тип', value: state.type });
     if (state.brand !== 'all') out.push({ key: 'brand', label: 'Бренд', value: state.brand });
     if (state.sort !== 'curated') {
       out.push({ key: 'sort', label: 'Сортування', value: sortFilter.options[sortFilter.selectedIndex].textContent.trim() });
@@ -287,7 +294,7 @@
     $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
     const pm = $('productMedia').querySelector('img');
     pm.addEventListener('error', () => { pm.src = 'images/placeholder.svg'; }, { once: true });
-    $('productCat').textContent = p._cat;
+    $('productCat').textContent = [p._cat, p._type].filter(Boolean).join(' · ');
     $('productBrand').textContent = p.brand;
     $('productTitle').textContent = p.aroma;
     $('productPriceMl').textContent = `${fmtNum(p.priceMl)} ₴ за 1 мл · флакон додається`;
@@ -483,6 +490,7 @@
     });
 
     brandFilter.addEventListener('change', () => { state.brand = brandFilter.value; apply(true); });
+    typeFilter.addEventListener('change', () => { state.type = typeFilter.value; apply(true); });
     sortFilter.addEventListener('change', () => { state.sort = sortFilter.value; apply(true); });
     moreBtn.addEventListener('click', () => { state.limit += PAGE; renderGrid(); });
 
@@ -493,6 +501,7 @@
       const k = b.dataset.clear;
       if (k === 'query') { searchInput.value = ''; clearSearch.hidden = true; state.query = ''; }
       if (k === 'cat') { state.cat = 'all'; renderCats(); }
+      if (k === 'type') { state.type = 'all'; typeFilter.value = 'all'; }
       if (k === 'brand') { state.brand = 'all'; brandFilter.value = 'all'; }
       if (k === 'sort') { state.sort = 'curated'; sortFilter.value = 'curated'; }
       apply(true);
@@ -589,9 +598,9 @@
   }
 
   function resetAllFilters() {
-    state.query = ''; state.cat = 'all'; state.brand = 'all'; state.sort = 'curated';
+    state.query = ''; state.cat = 'all'; state.type = 'all'; state.brand = 'all'; state.sort = 'curated';
     searchInput.value = ''; clearSearch.hidden = true;
-    brandFilter.value = 'all'; sortFilter.value = 'curated';
+    brandFilter.value = 'all'; typeFilter.value = 'all'; sortFilter.value = 'curated';
     renderCats(); apply(true);
   }
 
