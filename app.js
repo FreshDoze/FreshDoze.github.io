@@ -205,6 +205,30 @@
     else list = list.slice().sort((a, b) => a.brand.localeCompare(b.brand, 'uk') || a.aroma.localeCompare(b.aroma, 'uk'));
     state.filtered = list;
     renderGrid();
+    renderActiveFilters();
+  }
+
+  function filterState() {
+    const out = [];
+    if (state.query) out.push({ key: 'query', label: 'Пошук', value: state.query });
+    if (state.cat !== 'all') out.push({ key: 'cat', label: 'Категорія', value: state.cat });
+    if (state.brand !== 'all') out.push({ key: 'brand', label: 'Бренд', value: state.brand });
+    if (state.sort !== 'curated') {
+      out.push({ key: 'sort', label: 'Сортування', value: sortFilter.options[sortFilter.selectedIndex].textContent.trim() });
+    }
+    return out;
+  }
+
+  function renderActiveFilters() {
+    const box = $('activeFilters');
+    const items = filterState();
+    box.hidden = items.length === 0;
+    if (!items.length) { $('chips').innerHTML = ''; return; }
+    $('chips').innerHTML = items.map((f) =>
+      `<button class="chip" type="button" data-clear="${f.key}" aria-label="Прибрати фільтр ${esc(f.label)}">
+        ${esc(f.label)}: <b>${esc(f.value)}</b><span class="x" aria-hidden="true">✕</span>
+      </button>`
+    ).join('');
   }
 
   function renderGrid() {
@@ -450,11 +474,16 @@
     sortFilter.addEventListener('change', () => { state.sort = sortFilter.value; apply(true); });
     moreBtn.addEventListener('click', () => { state.limit += PAGE; renderGrid(); });
 
-    $('resetFilters').addEventListener('click', () => {
-      state.query = ''; state.cat = 'all'; state.brand = 'all'; state.sort = 'curated';
-      searchInput.value = ''; clearSearch.hidden = true;
-      brandFilter.value = 'all'; sortFilter.value = 'curated';
-      renderCats(); apply(true);
+    $('resetFilters').addEventListener('click', resetAllFilters);
+    $('activeFilters').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-clear]');
+      if (!b) return;
+      const k = b.dataset.clear;
+      if (k === 'query') { searchInput.value = ''; clearSearch.hidden = true; state.query = ''; }
+      if (k === 'cat') { state.cat = 'all'; renderCats(); }
+      if (k === 'brand') { state.brand = 'all'; brandFilter.value = 'all'; }
+      if (k === 'sort') { state.sort = 'curated'; sortFilter.value = 'curated'; }
+      apply(true);
     });
 
     grid.addEventListener('click', (e) => {
@@ -546,6 +575,13 @@
       if (!state.cart.length) { e.preventDefault(); return; }
       if (!reducedMotion) showToast('Відкриваю Telegram…');
     });
+  }
+
+  function resetAllFilters() {
+    state.query = ''; state.cat = 'all'; state.brand = 'all'; state.sort = 'curated';
+    searchInput.value = ''; clearSearch.hidden = true;
+    brandFilter.value = 'all'; sortFilter.value = 'curated';
+    renderCats(); apply(true);
   }
 
   function openCart() {

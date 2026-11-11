@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=1">
+<link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
 <a class="skip" href="#catalog">До каталогу</a>
@@ -46,6 +46,11 @@
 
       <div class="cats" id="cats" role="tablist" aria-label="Категорії"></div>
 
+      <div class="active-filters" id="activeFilters" hidden>
+        <div class="chips" id="chips"></div>
+        <button class="reset-link" id="resetFilters" type="button">Скинути все</button>
+      </div>
+
       <div class="filters">
         <label class="field">
           <span>Бренд</span>
@@ -74,7 +79,6 @@
       <div class="empty" id="empty" hidden>
         <p class="empty-title">Нічого не знайдено</p>
         <p class="empty-text">Спробуйте інший бренд, аромат або категорію.</p>
-        <button class="btn btn-ghost" id="resetFilters" type="button">Скинути фільтри</button>
       </div>
       <div class="more-wrap">
         <button class="btn btn-outline" id="moreBtn" type="button" hidden>Показати ще</button>
@@ -159,6 +163,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=1"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
