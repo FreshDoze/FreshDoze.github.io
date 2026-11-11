@@ -302,6 +302,7 @@
     if (!d.open) d.showModal();
     if (sc) sc.scrollTop = 0;
     document.body.classList.add('locked');
+    fitViewport();
     $('closeProduct').focus({ preventScroll: true });
   }
 
@@ -594,7 +595,16 @@
     renderCats(); apply(true);
   }
 
+  /* Висота вікна в пікселях: працює і там, де немає dvh (старі iOS) */
+  function fitViewport() {
+    const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    const root = document.documentElement;
+    root.style.setProperty('--dlg-h', Math.round(vh * 0.92) + 'px');
+    root.style.setProperty('--media-h', Math.round(vh * 0.30) + 'px');
+  }
+
   function openCart() {
+    fitViewport();
     renderCart();
     const d = $('cartDialog');
     if (!d.open) d.showModal();
@@ -611,6 +621,11 @@
       day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
     });
   }
+
+  window.addEventListener('resize', fitViewport);
+  window.addEventListener('orientationchange', () => setTimeout(fitViewport, 120));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', fitViewport);
+  fitViewport();
 
   boot();
 })();
