@@ -599,8 +599,8 @@
   function fitViewport() {
     const vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
     const root = document.documentElement;
-    root.style.setProperty('--dlg-h', Math.round(vh * 0.92) + 'px');
-    root.style.setProperty('--media-h', Math.round(vh * 0.30) + 'px');
+    root.style.setProperty('--dlg-h', Math.round(vh * 0.94) + 'px');
+    root.style.setProperty('--media-h', Math.round(vh * 0.26) + 'px');
   }
 
   function openCart() {
