@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" role="img" aria-label="Freshdoze">
+  <rect width="400" height="500" fill="#f2ede5"/>
+  <g fill="none" stroke="#b9ad9c" stroke-width="2">
+    <rect x="176" y="96" width="48" height="34" rx="5"/>
+    <path d="M166 130h68v20c0 10 12 18 12 38v190c0 14-10 24-24 24h-44c-14 0-24-10-24-24V188c0-20 12-28 12-38z"/>
+    <path d="M150 286h100"/>
+  </g>
+  <text x="200" y="438" text-anchor="middle" font-family="Georgia,serif" font-size="17" letter-spacing="4" fill="#8d8172">FRESHDOZE</text>
+</svg>

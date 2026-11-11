@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f4ee">
+<meta name="description" content="Freshdoze — парфумерія на розлив. Пробники та розлив від 2 мл. Ціни за мілілітр, флакон додається.">
+<title>Freshdoze — парфумерія на розлив</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+<a class="skip" href="#catalog">До каталогу</a>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="./" aria-label="Freshdoze — на головну">Freshdoze</a>
+    <div class="top-actions">
+      <span class="top-note">Парфуми на розлив</span>
+      <button class="cart-btn" id="cartBtn" type="button" aria-haspopup="dialog">
+        Кошик <span class="cart-count" id="cartCount">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="intro">
+    <div class="wrap">
+      <p class="eyebrow">Парфумерія на розлив · Україна</p>
+      <h1>Знайдіть свій аромат.</h1>
+      <p class="lede">Пробники та розлив від 2 мл. Ціна вказана за 1 мл, вартість флакона додається.</p>
+    </div>
+  </section>
+
+  <section class="controls" id="catalog">
+    <div class="wrap">
+      <div class="search" role="search">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.2-4.2"/></svg>
+        <input id="searchInput" type="search" placeholder="Пошук за брендом або ароматом" autocomplete="off" spellcheck="false" aria-label="Пошук за брендом або ароматом">
+        <button class="clear-search" id="clearSearch" type="button" aria-label="Очистити пошук" hidden>✕</button>
+      </div>
+
+      <div class="cats" id="cats" role="tablist" aria-label="Категорії"></div>
+
+      <div class="filters">
+        <label class="field">
+          <span>Бренд</span>
+          <select id="brandFilter" aria-label="Фільтр за брендом"><option value="all">Усі бренди</option></select>
+        </label>
+        <label class="field">
+          <span>Сортування</span>
+          <select id="sortFilter" aria-label="Сортування">
+            <option value="curated">Рекомендовані</option>
+            <option value="brand">За брендом</option>
+            <option value="price-asc">Від дешевших</option>
+            <option value="price-desc">Від дорожчих</option>
+          </select>
+        </label>
+        <div class="result-line">
+          <span id="resultCount" aria-live="polite"></span>
+          <span class="updated" id="updated"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="catalog-wrap">
+    <div class="wrap">
+      <div class="grid" id="grid" aria-live="polite"></div>
+      <div class="empty" id="empty" hidden>
+        <p class="empty-title">Нічого не знайдено</p>
+        <p class="empty-text">Спробуйте інший бренд, аромат або категорію.</p>
+        <button class="btn btn-ghost" id="resetFilters" type="button">Скинути фільтри</button>
+      </div>
+      <div class="more-wrap">
+        <button class="btn btn-outline" id="moreBtn" type="button" hidden>Показати ще</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-in">
+    <div class="footer-brand">Freshdoze</div>
+    <p>Ціни вказані за 1 мл. Вартість флакона додається до замовлення. Наявність оновлюється з CRM.</p>
+    <a href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Telegram</a>
+  </div>
+</footer>
+
+<div class="cartbar" id="cartBar" hidden>
+  <button class="cartbar-btn" id="cartBarBtn" type="button">
+    <span>Кошик <span class="cartbar-count" id="cartBarCount">0</span></span>
+    <span class="cartbar-total" id="cartBarTotal">0 ₴</span>
+  </button>
+</div>
+
+<dialog class="sheet product-dialog" id="productDialog" aria-labelledby="productTitle">
+  <button class="close product-close" id="closeProduct" type="button" aria-label="Закрити">✕</button>
+  <div class="product-layout">
+    <div class="product-media" id="productMedia"></div>
+    <div class="product-panel">
+      <div class="product-scroll">
+        <p class="modal-cat" id="productCat"></p>
+        <p class="modal-brand" id="productBrand"></p>
+        <h2 class="modal-name" id="productTitle"></h2>
+        <p class="modal-price" id="productPriceMl"></p>
+        <p class="modal-desc" id="productDesc"></p>
+        <a class="text-link" id="productTg" href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Детальніше в Telegram <span aria-hidden="true">↗</span></a>
+
+        <div class="modal-block">
+          <p class="modal-label">Обʼєм</p>
+          <div class="vol-grid" id="modalVols" role="group" aria-label="Обʼєм"></div>
+        </div>
+
+        <div class="modal-block modal-buy">
+          <div class="qty" role="group" aria-label="Кількість">
+            <button type="button" id="qtyMinus" aria-label="Зменшити кількість">−</button>
+            <span id="qtyValue">1</span>
+            <button type="button" id="qtyPlus" aria-label="Збільшити кількість">+</button>
+          </div>
+          <div class="modal-total">
+            <span>Разом</span>
+            <strong id="modalTotal">0 ₴</strong>
+          </div>
+        </div>
+      </div>
+      <div class="product-cta">
+        <button class="btn btn-primary" id="modalAdd" type="button">Додати в кошик</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="sheet cart-dialog" id="cartDialog" aria-labelledby="cartTitle">
+  <div class="cart-panel">
+    <div class="cart-head">
+      <div>
+        <p class="eyebrow">Замовлення</p>
+        <h2 id="cartTitle">Кошик</h2>
+      </div>
+      <button class="close" id="closeCart" type="button" aria-label="Закрити">✕</button>
+    </div>
+    <div class="cart-body" id="cartBody"></div>
+    <div class="cart-foot" id="cartFoot">
+      <div class="cart-sum"><span>Разом</span><strong id="cartTotal">0 ₴</strong></div>
+      <div class="cart-actions">
+        <button class="btn btn-outline" id="copyOrder" type="button">Скопіювати замовлення</button>
+        <a class="btn btn-primary" id="tgOrder" href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Замовити в Telegram</a>
+        <a class="btn btn-ghost" id="viberOrder" href="viber://chat?number=%2B380954117082">Замовити у Viber</a>
+      </div>
+      <p class="cart-hint">Перед відправкою перевірте текст замовлення. Можна скопіювати його та вставити у Viber.</p>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>
