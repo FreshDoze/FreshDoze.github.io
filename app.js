@@ -4,6 +4,9 @@
   const BOTTLES = { 2: 20, 3: 25, 5: 25, 10: 30, 15: 40, 20: 50, 30: 60, 50: 70 };
   const CARD_VOLS = [3, 5, 10];
   const ALL_VOLS = [2, 3, 5, 10, 15, 20, 30, 50];
+  const MIN_ML_CHEAP = 3;   // до 70 ₴/мл — від 3 мл
+  const MIN_ML_PREMIUM = 2; // від 70 ₴/мл — можна 2 мл
+  const PREMIUM_FROM = 70;
   const TG = 'https://t.me/AndresBurmachenko';
   const VIBER = 'viber://chat?number=%2B380954117082';
   const PAGE = 24;
@@ -74,6 +77,13 @@
   }
   function money(n) {
     return Math.round(Number(n) || 0).toLocaleString('uk-UA') + ' ₴';
+  }
+  function minMl(p) {
+    return (Number(p.priceMl) || 0) >= PREMIUM_FROM ? MIN_ML_PREMIUM : MIN_ML_CHEAP;
+  }
+  function allowedVols(p) {
+    const min = minMl(p);
+    return ALL_VOLS.filter((ml) => ml >= min);
   }
   function priceFor(p, ml) {
     return Math.round((Number(p.priceMl) || 0) * ml + (BOTTLES[ml] || 0));
@@ -289,7 +299,7 @@
   function openProduct(id) {
     const p = state.products[id];
     if (!p) return;
-    const sel = state.selected[id] || 3;
+    const sel = Math.max(state.selected[id] || 3, minMl(p));
     state.modal = { id, vol: sel, qty: 1 };
     $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
     const pm = $('productMedia').querySelector('img');
@@ -314,12 +324,15 @@
   }
 
   function renderModalVols() {
-    const { id, vol } = state.modal;
-    $('modalVols').innerHTML = ALL_VOLS.map((ml) =>
+    const { id } = state.modal;
+    const p = state.products[id];
+    const vols = allowedVols(p);
+    if (!vols.includes(state.modal.vol)) state.modal.vol = vols[0];
+    const vol = state.modal.vol;
+    $('modalVols').innerHTML = vols.map((ml) =>
       `<button class="vol${ml === vol ? ' active' : ''}" type="button" data-mvol="${ml}" aria-pressed="${ml === vol}">${ml} мл</button>`
     ).join('');
     $('qtyValue').textContent = state.modal.qty;
-    const p = state.products[id];
     $('modalTotal').textContent = money(priceFor(p, vol) * state.modal.qty);
     $('modalAdd').textContent = `Додати в кошик · ${money(priceFor(p, vol) * state.modal.qty)}`;
   }
@@ -342,6 +355,7 @@
 
   /* ---------- cart ---------- */
   function addToCart(p, ml, qty) {
+    if (ml < minMl(p)) ml = minMl(p);
     const key = `${p.art || (p.brand + '|' + p.aroma)}|${ml}`;
     const unit = priceFor(p, ml);
     let item = state.cart.find((x) => x.key === key);
