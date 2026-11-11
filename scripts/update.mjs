@@ -4,7 +4,8 @@
  *   SHEET_CSV_URL          — ціни (Бренд, Аромат, Ціна ОЛХ, Наявність)
  *   SHEET_CONTENT_CSV_URL  — контент (Бренд, Аромат, Стать, Тип, Опис, Telegram)
  */
-import { writeFile, readFile } from 'node:fs/promises';
+import { writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 
 const PRICE_URL = (process.env.SHEET_CSV_URL || '').trim();
 const CONTENT_URL = (process.env.SHEET_CONTENT_CSV_URL || '').trim();
@@ -100,6 +101,7 @@ if (CONTENT_URL) {
     const cT = headerIndex(h, 'тип', 'type');
     const cD = headerIndex(h, 'опис', 'описание', 'description');
     const cL = headerIndex(h, 'telegram', 'посилання', 'link');
+    const cP = headerIndex(h, 'фото', 'photo', 'image');
     for (const r of rows.slice(1)) {
       const b = String(r[cB] ?? '').trim();
       const a = String(r[cA] ?? '').trim();
@@ -109,6 +111,7 @@ if (CONTENT_URL) {
         type: cT >= 0 ? String(r[cT] ?? '').trim() : '',
         desc: cD >= 0 ? String(r[cD] ?? '').trim() : '',
         tg: cL >= 0 ? String(r[cL] ?? '').trim() : '',
+        photo: cP >= 0 ? String(r[cP] ?? '').trim() : '',
       };
     }
     console.log(`Контент: ${Object.keys(contentMap).length} рядків.`);
@@ -123,7 +126,37 @@ for (const p of products) {
   p.type = c.type || '';
   if (c.desc) p.desc = c.desc;
   if (c.tg) p.tg = c.tg;
+  if (c.photo) p.photo = c.photo;
 }
+
+/* ---------- фотографії з таблиці ---------- */
+await mkdir('images', { recursive: true });
+let photoOk = 0, photoFail = 0;
+const photoCache = new Map();
+for (const p of products) {
+  const url = String(p.photo || '').trim();
+  if (!/^https?:\/\//i.test(url)) { delete p.photo; continue; }
+  if (photoCache.has(url)) { p.image = photoCache.get(url); delete p.photo; continue; }
+  try {
+    const hash = createHash('sha1').update(url).digest('hex').slice(0, 12);
+    const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 FreshdozeBot' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const type = String(res.headers.get('content-type') || '');
+    if (!/^image\//i.test(type)) throw new Error('not an image: ' + type);
+    const ext = type.includes('png') ? 'png' : type.includes('webp') ? 'webp' : 'jpg';
+    const file = `images/sheet-${hash}.${ext}`;
+    try { await access(file); }
+    catch (e) { await writeFile(file, Buffer.from(await res.arrayBuffer())); }
+    p.image = file;
+    photoCache.set(url, file);
+    photoOk++;
+  } catch (e) {
+    console.log(`Фото не завантажено (${p.brand} ${p.aroma}): ${e.message}`);
+    photoFail++;
+  }
+  delete p.photo;
+}
+if (photoOk || photoFail) console.log(`Фото: ${photoOk} ок, ${photoFail} помилок.`);
 
 /* ---------- запис ---------- */
 products.sort((a, b) => a.brand.localeCompare(b.brand, 'uk') || a.aroma.localeCompare(b.aroma, 'uk'));

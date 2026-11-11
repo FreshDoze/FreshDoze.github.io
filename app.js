@@ -160,7 +160,7 @@
             _type: type,
             _desc: p.desc || c.desc || '',
             _tg: safeUrl(p.tg, safeUrl(c.telegram, TG)),
-            _image: c.image || '',
+            _image: p.image || c.image || '',
             _docName: c.docName || '',
             _search: norm([p.brand, p.aroma, c.docName, gender, type].join(' '))
           };
