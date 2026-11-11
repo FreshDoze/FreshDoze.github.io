@@ -297,7 +297,10 @@
     renderModalVols();
     updateModalTotals();
     const d = $('productDialog');
+    const sc = d.querySelector('.product-scroll');
+    if (sc) sc.scrollTop = 0;
     if (!d.open) d.showModal();
+    if (sc) sc.scrollTop = 0;
     document.body.classList.add('locked');
     $('closeProduct').focus({ preventScroll: true });
   }
