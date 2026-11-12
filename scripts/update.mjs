@@ -44,12 +44,23 @@ const headerIndex = (headers, ...needles) => {
   return -1;
 };
 
-async function fetchCsv(url, label) {
-  const res = await fetch(url, { redirect: 'follow', cache: 'no-store' });
-  if (!res.ok) throw new Error(`${label}: HTTP ${res.status}`);
-  const text = await res.text();
-  if (/^\s*</.test(text)) throw new Error(`${label}: отримано HTML замість CSV — перевір публікацію аркуша`);
-  return parseCsv(text);
+async function fetchCsv(url, label, tries = 3) {
+  let lastErr;
+  for (let attempt = 1; attempt <= tries; attempt++) {
+    try {
+      const res = await fetch(url, { redirect: 'follow', cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      if (/^\s*</.test(text)) throw new Error('HTML замість CSV — перевір публікацію аркуша');
+      const rows = parseCsv(text);
+      if (rows.length < 2) throw new Error('порожній CSV');
+      return rows;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < tries) await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw new Error(`${label}: ${lastErr.message}`);
 }
 
 if (!PRICE_URL) {
@@ -120,13 +131,25 @@ if (CONTENT_URL) {
   }
 }
 
+/* старий знімок — щоб не втратити контент, якщо аркуш тимчасово недоступний */
+const prevFile = await readFile('data.json', 'utf8').catch(() => '');
+let prevMap = new Map();
+try {
+  for (const old of (JSON.parse(prevFile).products || [])) {
+    prevMap.set(norm(old.brand + '|' + old.aroma), old);
+  }
+} catch (e) {}
+
 for (const p of products) {
-  const c = contentMap[norm(p.brand + '|' + p.aroma)] || {};
-  p.gender = c.gender || '';
-  p.type = c.type || '';
-  if (c.desc) p.desc = c.desc;
-  if (c.tg) p.tg = c.tg;
-  if (c.photo) p.photo = c.photo;
+  const key = norm(p.brand + '|' + p.aroma);
+  const c = contentMap[key] || {};
+  const old = prevMap.get(key) || {};
+  p.gender = c.gender || old.gender || '';
+  p.type = c.type || old.type || '';
+  p.desc = c.desc || old.desc || '';
+  p.tg = c.tg || old.tg || '';
+  p.photo = c.photo || '';
+  if (!p.photo && old.image) p.image = old.image;
 }
 
 /* ---------- фотографії з таблиці ---------- */
@@ -161,7 +184,7 @@ if (photoOk || photoFail) console.log(`Фото: ${photoOk} ок, ${photoFail} �
 /* ---------- запис ---------- */
 products.sort((a, b) => a.brand.localeCompare(b.brand, 'uk') || a.aroma.localeCompare(b.aroma, 'uk'));
 const next = JSON.stringify(products);
-const current = await readFile('data.json', 'utf8').catch(() => '');
+const current = prevFile;
 let prev = '';
 try { prev = JSON.stringify(JSON.parse(current).products || []); } catch (e) {}
 
