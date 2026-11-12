@@ -234,13 +234,21 @@
       return out;
     };
 
-    // 1) швидко: тільки ціни
-    const fast = buildList(null);
-    if (fast.length && onPartial) onPartial(fast);
-    if (!fast.length) return null;
+    // якщо контент прийде швидко — показуємо одразу повний список, без проміжного блимання
+    const race = await Promise.race([
+      contentP,
+      new Promise((r) => setTimeout(() => r('__slow__'), 900))
+    ]);
 
-    // 2) контент — коли прийде
-    contentRows = await contentP;
+    if (race === '__slow__') {
+      const fast = buildList(null);
+      if (fast.length && onPartial) onPartial(fast);
+      if (!fast.length) return null;
+      contentRows = await contentP;
+    } else {
+      contentRows = race;
+      if (!contentRows) return null;
+    }
     const withContent = contentRows ? buildList(contentRows) : fast;
     return { products: withContent.length ? withContent : fast, updated: new Date().toISOString(), live: true };
   }
@@ -274,6 +282,8 @@
         }
       } catch (e) {}
 
+      let renderedFromCache = false;
+      let pendingCacheSave = false;
       // миттєвий рендер із кешу
       if (cached) {
         setProducts(cached.products);
@@ -282,10 +292,13 @@
         try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
         prepareUI();
         apply(true);
+        renderedFromCache = true;
       }
 
       let live = null;
       const showPartial = (prods) => {
+        // якщо вже намалювали з кешу — не перемальовуємо проміжними даними
+        if (renderedFromCache) return;
         try {
           setProducts(prods);
           state.live = true;
@@ -301,7 +314,7 @@
       if (!live) live = await fetchLive();
       if (!live && cached) live = cached;
       if (live && live.products && live.products.length) {
-        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ products: live.products, updated: live.updated || '' })); } catch (e) {}
+        pendingCacheSave = true;
       }
       const [productsRes, contentRes] = await Promise.all([
         live ? Promise.resolve({ ok: true, json: async () => live }) : fetch('data.json?ts=' + Date.now(), { cache: 'no-store' }),
@@ -325,6 +338,18 @@
       prepareUI();
       apply(true);
       state.ready = true;
+      if (pendingCacheSave) {
+        pendingCacheSave = false;
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            products: state.products.map((p) => ({
+              brand: p.brand, aroma: p.aroma, priceMl: p.priceMl, stock: p.stock,
+              gender: p.gender, type: p.type, desc: p.desc, tg: p.tg, image: p._image || p.image || ''
+            })),
+            updated: state.updated || ''
+          }));
+        } catch (e) {}
+      }
       deepLinkProduct();
     } catch (e) {
       grid.innerHTML = '';
@@ -468,10 +493,26 @@
     try { localStorage.setItem(VIEW_KEY, state.view); } catch (e) {}
   }
 
+  let lastGridSig = '';
+  function gridSignature(slice) {
+    return [state.view, state.cat, state.type, state.price, state.brand, state.sort, state.query, state.limit].join('|') +
+      '#' + slice.map((p) => `${p._id}:${p.priceMl}:${p._image}:${p.stock}:${p._cat}:${p._type}`).join(',');
+  }
+
   function renderGrid() {
     hideSkeleton();
     const list = state.filtered;
     const slice = list.slice(0, state.limit);
+
+    // якщо на екрані вже те саме — не перемальовуємо (уникаємо блимання)
+    const sig = gridSignature(slice);
+    if (sig === lastGridSig && grid.children.length === slice.length) {
+      empty.hidden = list.length !== 0;
+      moreBtn.hidden = list.length <= state.limit;
+      applyView();
+      return;
+    }
+    lastGridSig = sig;
     grid.innerHTML = slice.map(cardHtml).join('');
     empty.hidden = list.length !== 0;
     moreBtn.hidden = list.length <= state.limit;
