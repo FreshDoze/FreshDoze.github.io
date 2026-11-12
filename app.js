@@ -326,14 +326,6 @@
       apply(true);
       state.ready = true;
       deepLinkProduct();
-      state.cart = loadCart();
-      try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
-      bind();
-      buildBrands();
-      renderCats();
-      updateUpdated();
-      updateCartUI();
-      apply(true);
     } catch (e) {
       grid.innerHTML = '';
       empty.hidden = false;
@@ -454,9 +446,6 @@
     if (state.cat !== 'all') out.push({ key: 'cat', label: 'Стать', value: state.cat });
     if (state.type !== 'all') out.push({ key: 'type', label: 'Тип', value: state.type });
     if (state.brand !== 'all') out.push({ key: 'brand', label: 'Бренд', value: state.brand });
-    if (state.sort !== 'curated') {
-      out.push({ key: 'sort', label: 'Сортування', value: sortFilter.options[sortFilter.selectedIndex].textContent.trim() });
-    }
     return out;
   }
 
@@ -539,6 +528,7 @@
   /* ---------- product modal ---------- */
   function deepLinkProduct() {
     const q = new URLSearchParams(location.search);
+    state.deepLinked = q.has('b') || q.has('a') || q.has('p');
     const b = (q.get('b') || '').trim();
     const a = (q.get('a') || '').trim();
     if (b && a) {
@@ -546,7 +536,8 @@
         norm(x.brand) === norm(b) && norm(x.aroma) === norm(a));
       if (p) { openProduct(p._id); return true; }
     }
-    const pid = Number(q.get('p'));
+    const rawP = q.get('p');
+    const pid = rawP === null || rawP === '' ? NaN : Number(rawP);
     if (Number.isFinite(pid) && state.products[pid]) { openProduct(pid); return true; }
     return false;
   }
@@ -556,12 +547,6 @@
     if (!p) return;
     const sel = Math.max(state.selected[id] || 3, minMl(p));
     state.modal = { id, vol: sel };
-    try {
-      const u = new URL(location.href);
-      u.searchParams.set('b', p.brand);
-      u.searchParams.set('a', p.aroma);
-      history.replaceState(null, '', u);
-    } catch (e) {}
     $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
     const pm = $('productMedia').querySelector('img');
     pm.addEventListener('error', () => { pm.src = 'images/placeholder.svg'; }, { once: true });
@@ -748,7 +733,7 @@
       return `${title}\n${x.ml} мл — ${Math.round(unit)} грн`;
     });
 
-    return blocks.join('\n\n') +
+    return 'Хочу замовити:\n\n' + blocks.join('\n\n') +
       `\n\nЗагалом у замовленні: ${fmtNum(totalMl)} мл\n` +
       `Тара: ${Math.round(tara)} грн\n` +
       `До сплати: ${Math.round(sum)} грн`;
@@ -789,7 +774,13 @@
   }
 
   let toastTimer = null;
+  function toastHost() {
+    const open = document.querySelector('dialog[open]');
+    const host = open || document.body;
+    if (toastEl.parentElement !== host) host.appendChild(toastEl);
+  }
   function showToast(text, kind) {
+    toastHost();
     toastEl.innerHTML = (kind === 'ok'
       ? '<svg class="toast-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.3L19 7"/></svg>'
       : '') + '<span>' + esc(text) + '</span>';
@@ -891,7 +882,13 @@
     $('cartBtn').addEventListener('click', openCart);
     $('productDialog').addEventListener('click', (e) => { if (e.target === $('productDialog')) closeDialog($('productDialog')); });
     $('cartDialog').addEventListener('click', (e) => { if (e.target === $('cartDialog')) closeDialog($('cartDialog')); });
-    $('productDialog').addEventListener('close', () => document.body.classList.remove('locked'));
+    $('productDialog').addEventListener('close', () => {
+      document.body.classList.remove('locked');
+      if (state.deepLinked) {
+        state.deepLinked = false;
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+      }
+    });
     $('cartDialog').addEventListener('close', () => document.body.classList.remove('locked'));
     $('productDialog').addEventListener('cancel', () => document.body.classList.remove('locked'));
     $('cartDialog').addEventListener('cancel', () => document.body.classList.remove('locked'));
