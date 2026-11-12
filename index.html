@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=36">
+<link rel="stylesheet" href="styles.css?v=38">
 </head>
 <body>
 <a class="skip" href="#catalog">До каталогу</a>
@@ -139,6 +139,12 @@
 
 
 <dialog class="sheet product-dialog" id="productDialog" aria-labelledby="productTitle">
+  <button class="share-btn" id="shareProduct" type="button" aria-label="Поділитися ароматом">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path class="sb-box" d="M7.4 10.2H5.6A1.6 1.6 0 0 0 4 11.8v7.2a1.6 1.6 0 0 0 1.6 1.6h12.8a1.6 1.6 0 0 0 1.6-1.6v-7.2a1.6 1.6 0 0 0-1.6-1.6h-1.8"/>
+      <path class="sb-arrow" d="M12 15.2V3.6M8.4 7 12 3.4 15.6 7"/>
+    </svg>
+  </button>
   <button class="close product-close" id="closeProduct" type="button" aria-label="Закрити">✕</button>
   <div class="product-layout">
     <div class="product-media" id="productMedia"></div>
@@ -198,6 +204,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=36"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>

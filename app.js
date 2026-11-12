@@ -878,6 +878,26 @@
     });
 
     $('closeProduct').addEventListener('click', () => closeDialog($('productDialog')));
+
+    $('shareProduct').addEventListener('click', async () => {
+      if (!state.modal) return;
+      const p = state.products[state.modal.id];
+      if (!p) return;
+      const url = location.origin + location.pathname +
+        '?b=' + encodeURIComponent(p.brand) + '&a=' + encodeURIComponent(p.aroma);
+      const title = `${p.brand} ${p.aroma}`;
+      const text = `${title} — Freshdoze`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title, text, url });
+          return;
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+      const ok = await copyText(url);
+      showToast(ok ? 'Посилання скопійовано' : 'Не вдалося скопіювати', ok ? 'ok' : '');
+    });
     $('closeCart').addEventListener('click', () => closeDialog($('cartDialog')));
     $('cartBtn').addEventListener('click', openCart);
     $('productDialog').addEventListener('click', (e) => { if (e.target === $('productDialog')) closeDialog($('productDialog')); });
