@@ -616,7 +616,7 @@
     });
     saveCart();
     updateCartUI();
-    showToast(`${p.brand} ${p.aroma} · ${ml} мл — у кошику`);
+    showToast(`${p.brand} ${p.aroma} · ${ml} мл — у кошику`, 'ok');
   }
 
   function cartTotal() {
@@ -712,7 +712,7 @@
       if (!window.confirm('Очистити кошик повністю?')) return;
       state.cart = [];
       saveCart(); updateCartUI();
-      showToast('Кошик очищено');
+      showToast('Кошик очищено', 'ok');
     });
   }
 
@@ -774,19 +774,19 @@
   }
 
   let toastTimer = null;
-  function toastHost() {
-    const open = document.querySelector('dialog[open]');
-    const host = open || document.body;
-    if (toastEl.parentElement !== host) host.appendChild(toastEl);
-  }
   function showToast(text, kind) {
-    toastHost();
     toastEl.innerHTML = (kind === 'ok'
       ? '<svg class="toast-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.3L19 7"/></svg>'
       : '') + '<span>' + esc(text) + '</span>';
     toastEl.className = 'toast show' + (kind ? ' ' + kind : '');
+    try {
+      if (toastEl.showPopover && !toastEl.matches(':popover-open')) toastEl.showPopover();
+    } catch (e) {}
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+    toastTimer = setTimeout(() => {
+      toastEl.classList.remove('show');
+      try { if (toastEl.hidePopover && toastEl.matches(':popover-open')) toastEl.hidePopover(); } catch (e) {}
+    }, 2200);
   }
 
   /* ---------- events ---------- */
@@ -967,7 +967,7 @@
     });
     $('tgOrder').addEventListener('click', (e) => {
       if (!state.cart.length) { e.preventDefault(); return; }
-      if (!reducedMotion) showToast('Відкриваю Telegram…');
+      if (!reducedMotion) showToast('Відкриваю Telegram…', 'ok');
     });
   }
 
