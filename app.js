@@ -329,7 +329,7 @@
     const p = state.products[id];
     if (!p) return;
     const sel = Math.max(state.selected[id] || 3, minMl(p));
-    state.modal = { id, vol: sel, qty: 1 };
+    state.modal = { id, vol: sel };
     $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
     const pm = $('productMedia').querySelector('img');
     pm.addEventListener('error', () => { pm.src = 'images/placeholder.svg'; }, { once: true });
@@ -361,16 +361,14 @@
     $('modalVols').innerHTML = vols.map((ml) =>
       `<button class="vol${ml === vol ? ' active' : ''}" type="button" data-mvol="${ml}" aria-pressed="${ml === vol}">${ml} мл</button>`
     ).join('');
-    $('qtyValue').textContent = state.modal.qty;
-    $('modalTotal').textContent = money(priceFor(p, vol) * state.modal.qty);
-    $('modalAdd').textContent = `Додати в кошик · ${money(priceFor(p, vol) * state.modal.qty)}`;
+    $('modalTotal').textContent = money(priceFor(p, vol));
+    $('modalAdd').textContent = `Додати в кошик · ${money(priceFor(p, vol))}`;
   }
   function updateModalTotals() {
-    const { id, vol, qty } = state.modal;
+    const { id, vol } = state.modal;
     const p = state.products[id];
-    $('qtyValue').textContent = qty;
-    $('modalTotal').textContent = money(priceFor(p, vol) * qty);
-    $('modalAdd').textContent = `Додати в кошик · ${money(priceFor(p, vol) * qty)}`;
+    $('modalTotal').textContent = money(priceFor(p, vol));
+    $('modalAdd').textContent = `Додати в кошик · ${money(priceFor(p, vol))}`;
     $('modalVols').querySelectorAll('[data-mvol]').forEach((b) => {
       const on = Number(b.dataset.mvol) === vol;
       b.classList.toggle('active', on);
@@ -456,20 +454,27 @@
     body.innerHTML = state.cart.map((x) => {
       const p = productFor(x);
       const vols = p ? allowedVols(p) : [x.ml];
-      const opts = vols.map((ml) => {
+      const items = vols.map((ml) => {
         const price = p ? priceFor(p, ml) : x.unit;
-        return `<option value="${ml}"${ml === x.ml ? ' selected' : ''}>${ml} мл — ${money(price)}</option>`;
+        return `<button type="button" class="cv-opt${ml === x.ml ? ' on' : ''}" data-vol-pick="${esc(x.key)}" data-ml="${ml}">${ml} мл — ${money(price)}</button>`;
       }).join('');
+      const qty = Number(x.qty) || 1;
       return `
       <div class="cart-item" data-key="${esc(x.key)}">
         <div class="cart-thumb"><img src="${esc(x.image || 'images/placeholder.svg')}" alt=""></div>
-        <div>
+        <div class="cart-main">
           <div class="cart-name">${esc(x.brand)}</div>
           <div class="cart-aroma">${esc(x.aroma)}</div>
-          <select class="cart-vol" data-cart-vol="${esc(x.key)}" aria-label="Обʼєм">${opts}</select>
+          <div class="cv" data-cv="${esc(x.key)}">
+            <button type="button" class="cv-btn" data-vol-open="${esc(x.key)}">
+              <span>${x.ml} мл${qty > 1 ? ' × ' + qty : ''} — ${money(x.unit * qty)}</span>
+              <span class="cv-ar" aria-hidden="true">▾</span>
+            </button>
+            <div class="cv-menu" data-vol-menu="${esc(x.key)}" hidden>${items}</div>
+          </div>
         </div>
-        <div>
-          <div class="cart-line">${money(x.unit)}</div>
+        <div class="cart-side">
+          <div class="cart-line">${money(x.unit * qty)}</div>
           <button class="cart-remove" type="button" data-cart-remove="${esc(x.key)}">прибрати</button>
         </div>
       </div>`;
@@ -589,21 +594,11 @@
       state.modal.vol = Number(b.dataset.mvol);
       updateModalTotals();
     });
-    $('qtyMinus').addEventListener('click', () => {
-      if (!state.modal) return;
-      state.modal.qty = Math.max(1, state.modal.qty - 1);
-      updateModalTotals();
-    });
-    $('qtyPlus').addEventListener('click', () => {
-      if (!state.modal) return;
-      state.modal.qty = Math.min(99, state.modal.qty + 1);
-      updateModalTotals();
-    });
     $('modalAdd').addEventListener('click', () => {
       if (!state.modal) return;
       const p = state.products[state.modal.id];
-      const { vol, qty } = state.modal;
-      addToCart(p, vol, qty);
+      const { vol } = state.modal;
+      addToCart(p, vol, 1);
       state.selected[p._id] = vol;
       state.modal = null;
       closeDialog($('productDialog'));
@@ -621,6 +616,9 @@
     $('cartDialog').addEventListener('cancel', () => document.body.classList.remove('locked'));
 
     $('cartBody').addEventListener('click', (e) => {
+      if (!e.target.closest('[data-vol-open]') && !e.target.closest('[data-vol-menu]')) {
+        $('cartBody').querySelectorAll('[data-vol-menu]').forEach((m) => { m.hidden = true; });
+      }
       const rem = e.target.closest('[data-cart-remove]');
       if (rem) {
         state.cart = state.cart.filter((i) => i.key !== rem.dataset.cartRemove);
@@ -628,24 +626,39 @@
       }
     });
 
-    $('cartBody').addEventListener('change', (e) => {
-      const sel = e.target.closest('[data-cart-vol]');
-      if (!sel) return;
-      const item = state.cart.find((i) => i.key === sel.dataset.cartVol);
-      if (!item) return;
-      const ml = Number(sel.value);
-      if (!ml || ml === item.ml) return;
-      const p = productFor(item);
-      const unit = p ? priceFor(p, ml) : item.unit;
-      const base = item.base || item.key.slice(0, item.key.lastIndexOf('|'));
-      const newKey = `${base}|${ml}`;
-      const dup = state.cart.find((i) => i.key === newKey);
-      if (dup) {
-        state.cart = state.cart.filter((i) => i.key !== item.key);
-      } else {
-        item.key = newKey; item.base = base; item.ml = ml; item.unit = unit;
+    $('cartBody').addEventListener('click', (e) => {
+      const open = e.target.closest('[data-vol-open]');
+      if (open) {
+        const key = open.dataset.volOpen;
+        const menu = $('cartBody').querySelector(`[data-vol-menu="${CSS.escape(key)}"]`);
+        const wasHidden = menu && menu.hidden;
+        $('cartBody').querySelectorAll('[data-vol-menu]').forEach((m) => { m.hidden = true; });
+        if (menu) {
+          menu.hidden = !wasHidden;
+          if (!menu.hidden && menu.scrollIntoView) menu.scrollIntoView({ block: 'nearest' });
+        }
+        return;
       }
-      saveCart(); updateCartUI();
+      const pick = e.target.closest('[data-vol-pick]');
+      if (pick) {
+        const item = state.cart.find((i) => i.key === pick.dataset.volPick);
+        if (!item) return;
+        const ml = Number(pick.dataset.ml);
+        if (!ml) return;
+        const p = productFor(item);
+        const unit = p ? priceFor(p, ml) : item.unit;
+        const base = item.base || item.key.slice(0, item.key.lastIndexOf('|'));
+        const newKey = `${base}|${ml}`;
+        const qty = Number(item.qty) || 1;
+        const dup = state.cart.find((i) => i.key === newKey && i !== item);
+        if (dup) {
+          dup.qty = (Number(dup.qty) || 1) + qty;
+          state.cart = state.cart.filter((i) => i !== item);
+        } else {
+          item.key = newKey; item.base = base; item.ml = ml; item.unit = unit;
+        }
+        saveCart(); updateCartUI();
+      }
     });
 
     $('clearCart').addEventListener('click', () => {
