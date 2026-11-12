@@ -12,6 +12,7 @@
   const VIBER = 'viber://chat?number=%2B380954117082';
   const PAGE = 24;
   const CART_KEY = 'freshdoze_cart_v1';
+  const VIEW_KEY = 'freshdoze_view_v1';
 
   const $ = (id) => document.getElementById(id);
   const grid = $('grid');
@@ -37,6 +38,7 @@
     type: 'all',
     brand: 'all',
     sort: 'curated',
+    view: 'grid',
     limit: PAGE,
     selected: {},
     cart: [],
@@ -185,6 +187,7 @@
           };
         });
       state.cart = loadCart();
+      try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
       bind();
       buildBrands();
       renderCats();
@@ -266,12 +269,20 @@
     ).join('');
   }
 
+  function applyView() {
+    grid.classList.toggle('list', state.view === 'list');
+    $('viewGrid').setAttribute('aria-pressed', String(state.view === 'grid'));
+    $('viewList').setAttribute('aria-pressed', String(state.view === 'list'));
+    try { localStorage.setItem(VIEW_KEY, state.view); } catch (e) {}
+  }
+
   function renderGrid() {
     const list = state.filtered;
     const slice = list.slice(0, state.limit);
     grid.innerHTML = slice.map(cardHtml).join('');
     empty.hidden = list.length !== 0;
     moreBtn.hidden = list.length <= state.limit;
+    applyView();
     resultCount.textContent = `${list.length} ${plural(list.length, 'аромат', 'аромати', 'ароматів')}`;
     grid.querySelectorAll('img[data-ph]').forEach((img) => {
       img.addEventListener('error', () => { img.src = 'images/placeholder.svg'; }, { once: true });
@@ -372,9 +383,16 @@
   }
 
   /* ---------- cart ---------- */
+  function cartBase(p) {
+    return p.art || (p.brand + '|' + p.aroma);
+  }
+  function productFor(item) {
+    return state.products.find((p) => p.brand === item.brand && p.aroma === item.aroma) || null;
+  }
+
   function addToCart(p, ml, qty) {
     if (ml < minMl(p)) ml = minMl(p);
-    const key = `${p.art || (p.brand + '|' + p.aroma)}|${ml}`;
+    const key = `${cartBase(p)}|${ml}`;
     const unit = priceFor(p, ml);
     let item = state.cart.find((x) => x.key === key);
     if (item) {
@@ -383,7 +401,7 @@
     } else {
       state.cart.push({
         key, brand: p.brand, aroma: p.aroma, ml,
-        qty, unit, image: p._image || ''
+        qty, unit, image: p._image || '', base: cartBase(p)
       });
     }
     saveCart();
@@ -415,6 +433,8 @@
     }
     if ($('cartDialog').open) renderCart();
     const has = state.cart.length > 0;
+    $('clearCart').disabled = !has;
+    $('clearCart').style.opacity = has ? '' : '.4';
     $('copyOrder').disabled = !has;
     $('tgOrder').setAttribute('aria-disabled', String(!has));
     $('tgOrder').style.opacity = has ? '' : '.45';
@@ -433,25 +453,27 @@
       $('cartTotal').textContent = money(0);
       return;
     }
-    body.innerHTML = state.cart.map((x) => `
+    body.innerHTML = state.cart.map((x) => {
+      const p = productFor(x);
+      const vols = p ? allowedVols(p) : [x.ml];
+      const opts = vols.map((ml) => {
+        const price = p ? priceFor(p, ml) : x.unit;
+        return `<option value="${ml}"${ml === x.ml ? ' selected' : ''}>${ml} мл — ${money(price)}</option>`;
+      }).join('');
+      return `
       <div class="cart-item" data-key="${esc(x.key)}">
         <div class="cart-thumb"><img src="${esc(x.image || 'images/placeholder.svg')}" alt=""></div>
         <div>
           <div class="cart-name">${esc(x.brand)}</div>
           <div class="cart-aroma">${esc(x.aroma)}</div>
-          <div class="cart-meta">${x.ml} мл · ${money(x.unit)}</div>
-          <div class="cart-qty">
-            <button type="button" data-cart-dec="${esc(x.key)}" aria-label="Зменшити кількість">−</button>
-            <span>${x.qty}</span>
-            <button type="button" data-cart-inc="${esc(x.key)}" aria-label="Збільшити кількість">+</button>
-          </div>
+          <select class="cart-vol" data-cart-vol="${esc(x.key)}" aria-label="Обʼєм">${opts}</select>
         </div>
         <div>
-          <div class="cart-line">${money(x.unit * x.qty)}</div>
+          <div class="cart-line">${money(x.unit)}</div>
           <button class="cart-remove" type="button" data-cart-remove="${esc(x.key)}">прибрати</button>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
     $('cartTotal').textContent = money(cartTotal());
   }
 
@@ -526,6 +548,8 @@
     sortFilter.addEventListener('change', () => { state.sort = sortFilter.value; apply(true); });
     moreBtn.addEventListener('click', () => { state.limit += PAGE; renderGrid(); });
 
+    $('viewGrid').addEventListener('click', () => { state.view = 'grid'; applyView(); });
+    $('viewList').addEventListener('click', () => { state.view = 'list'; applyView(); });
     $('resetFilters').addEventListener('click', resetAllFilters);
     $('activeFilters').addEventListener('click', (e) => {
       const b = e.target.closest('[data-clear]');
@@ -597,21 +621,38 @@
     $('cartDialog').addEventListener('cancel', () => document.body.classList.remove('locked'));
 
     $('cartBody').addEventListener('click', (e) => {
-      const inc = e.target.closest('[data-cart-inc]');
-      const dec = e.target.closest('[data-cart-dec]');
       const rem = e.target.closest('[data-cart-remove]');
-      if (inc) {
-        const x = state.cart.find((i) => i.key === inc.dataset.cartInc);
-        if (x) x.qty = Math.min(99, x.qty + 1);
-        saveCart(); updateCartUI();
-      } else if (dec) {
-        const x = state.cart.find((i) => i.key === dec.dataset.cartDec);
-        if (x) x.qty = Math.max(1, x.qty - 1);
-        saveCart(); updateCartUI();
-      } else if (rem) {
+      if (rem) {
         state.cart = state.cart.filter((i) => i.key !== rem.dataset.cartRemove);
         saveCart(); updateCartUI();
       }
+    });
+
+    $('cartBody').addEventListener('change', (e) => {
+      const sel = e.target.closest('[data-cart-vol]');
+      if (!sel) return;
+      const item = state.cart.find((i) => i.key === sel.dataset.cartVol);
+      if (!item) return;
+      const ml = Number(sel.value);
+      if (!ml || ml === item.ml) return;
+      const p = productFor(item);
+      const unit = p ? priceFor(p, ml) : item.unit;
+      const base = item.base || item.key.slice(0, item.key.lastIndexOf('|'));
+      const newKey = `${base}|${ml}`;
+      const dup = state.cart.find((i) => i.key === newKey);
+      if (dup) {
+        state.cart = state.cart.filter((i) => i.key !== item.key);
+      } else {
+        item.key = newKey; item.base = base; item.ml = ml; item.unit = unit;
+      }
+      saveCart(); updateCartUI();
+    });
+
+    $('clearCart').addEventListener('click', () => {
+      if (!state.cart.length) return;
+      state.cart = [];
+      saveCart(); updateCartUI();
+      showToast('Кошик очищено');
     });
 
     $('copyOrder').addEventListener('click', async () => {

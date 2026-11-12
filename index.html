@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=17">
+<link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
 <a class="skip" href="#catalog">До каталогу</a>
@@ -21,7 +21,6 @@
   <div class="wrap topbar-in">
     <a class="brand" href="./" aria-label="Freshdoze — на головну">Freshdoze</a>
     <div class="top-actions">
-      <span class="top-note">Парфуми на розлив</span>
       <button class="cart-btn" id="cartBtn" type="button" aria-haspopup="dialog" aria-label="Кошик">
         <svg class="cart-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M3 5h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.5L21 8H6"/>
@@ -82,6 +81,15 @@
             <option value="price-desc">Від дорожчих</option>
           </select>
         </label>
+        <div class="view-toggle" role="group" aria-label="Вигляд каталогу">
+          <button type="button" class="vt" id="viewGrid" aria-label="Сітка" aria-pressed="true">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="2" width="7" height="7" rx="1"/><rect x="11" y="2" width="7" height="7" rx="1"/><rect x="2" y="11" width="7" height="7" rx="1"/><rect x="11" y="11" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button type="button" class="vt" id="viewList" aria-label="Список" aria-pressed="false">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="3" width="16" height="3" rx="1"/><rect x="2" y="8.5" width="16" height="3" rx="1"/><rect x="2" y="14" width="16" height="3" rx="1"/></svg>
+          </button>
+        </div>
+
         <div class="result-line">
           <span id="resultCount" aria-live="polite"></span>
           <span class="updated" id="updated"></span>
@@ -107,8 +115,16 @@
 <footer class="footer">
   <div class="wrap footer-in">
     <div class="footer-brand">Freshdoze</div>
-    <p>Ціни вказані за 1 мл. Вартість флакона додається до замовлення. Наявність оновлюється з CRM.</p>
-    <a href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Telegram</a>
+    <a class="tg-cta" href="https://t.me/FreshDozeClub" target="_blank" rel="noopener">
+      <svg class="tg-ic" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M21.6 4.3 3.4 11.2c-.9.3-.9 1.5 0 1.8l4.5 1.5 1.7 5.2c.2.7 1.1.9 1.6.3l2.4-2.6 4.5 3.3c.6.5 1.5.1 1.6-.6l3-14.2c.2-.8-.6-1.5-1.4-1.2z"/>
+      </svg>
+      <span class="tg-tx">
+        <b>Telegram-канал Freshdoze</b>
+        <span>Реальні фото флаконів, анонси новинок та актуальні ціни — підписуйтесь</span>
+      </span>
+      <span class="tg-ar" aria-hidden="true">→</span>
+    </a>
   </div>
 </footer>
 
@@ -163,6 +179,7 @@
     <div class="cart-foot" id="cartFoot">
       <div class="cart-sum"><span>Разом</span><strong id="cartTotal">0 ₴</strong></div>
       <div class="cart-actions">
+        <button class="clear-cart" id="clearCart" type="button">Очистити кошик</button>
         <button class="btn btn-outline" id="copyOrder" type="button">Скопіювати замовлення</button>
         <a class="btn btn-primary" id="tgOrder" href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Замовити в Telegram</a>
         <a class="btn btn-ghost" id="viberOrder" href="viber://chat?number=%2B380954117082">Замовити у Viber</a>
@@ -174,6 +191,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=20"></script>
 </body>
 </html>
