@@ -245,7 +245,6 @@
 
   function filterState() {
     const out = [];
-    if (state.query) out.push({ key: 'query', label: 'Пошук', value: state.query });
     if (state.cat !== 'all') out.push({ key: 'cat', label: 'Стать', value: state.cat });
     if (state.type !== 'all') out.push({ key: 'type', label: 'Тип', value: state.type });
     if (state.brand !== 'all') out.push({ key: 'brand', label: 'Бренд', value: state.brand });
