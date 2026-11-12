@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=21">
+<link rel="stylesheet" href="styles.css?v=22">
 </head>
 <body>
 <a class="skip" href="#catalog">До каталогу</a>
@@ -147,7 +147,7 @@
           <div class="vol-grid" id="modalVols" role="group" aria-label="Обʼєм"></div>
         </div>
 
-        <div class="modal-block modal-buy">
+        <div class="modal-block modal-buy" hidden>
           <div class="modal-total">
             <span>Разом</span>
             <strong id="modalTotal">0 ₴</strong>
@@ -164,17 +164,22 @@
 <dialog class="sheet cart-dialog" id="cartDialog" aria-labelledby="cartTitle">
   <div class="cart-panel">
     <div class="cart-head">
-      <div>
-        <p class="eyebrow">Замовлення</p>
+      <div class="cart-head-l">
+        <svg class="cart-head-ic" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 5h2.2l2.1 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.5L21 8H6"/>
+          <circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/>
+        </svg>
         <h2 id="cartTitle">Кошик</h2>
       </div>
-      <button class="close" id="closeCart" type="button" aria-label="Закрити">✕</button>
+      <div class="cart-head-r">
+        <button class="close" id="closeCart" type="button" aria-label="Закрити">✕</button>
+        <button class="clear-cart" id="clearCart" type="button">Очистити</button>
+      </div>
     </div>
     <div class="cart-body" id="cartBody"></div>
     <div class="cart-foot" id="cartFoot">
       <div class="cart-sum"><span>Разом</span><strong id="cartTotal">0 ₴</strong></div>
       <div class="cart-actions">
-        <button class="clear-cart" id="clearCart" type="button">Очистити кошик</button>
         <button class="btn btn-outline" id="copyOrder" type="button">Скопіювати замовлення</button>
         <a class="btn btn-primary" id="tgOrder" href="https://t.me/AndresBurmachenko" target="_blank" rel="noopener">Замовити в Telegram</a>
         <a class="btn btn-ghost" id="viberOrder" href="viber://chat?number=%2B380954117082">Замовити у Viber</a>
@@ -186,6 +191,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="app.js?v=21"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

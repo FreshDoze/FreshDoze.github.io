@@ -7,7 +7,8 @@
   const MIN_ML_CHEAP = 3;   // до 70 ₴/мл — від 3 мл
   const MIN_ML_PREMIUM = 2; // від 70 ₴/мл — можна 2 мл
   const PREMIUM_FROM = 70;
-  const API_URL = ''; // ← сюди URL веб-застосунку Apps Script (?api=1)
+  const SHEET_PRICES = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT2910MKzvkZPTeRiLeIFrJw05NmJ1puf846KMAPBI58wPRTu7ewF8VtQ6qsu9mDsj9fTT-zf1u4-WE/pub?gid=1010258278&single=true&output=csv';
+  const SHEET_CONTENT = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT2910MKzvkZPTeRiLeIFrJw05NmJ1puf846KMAPBI58wPRTu7ewF8VtQ6qsu9mDsj9fTT-zf1u4-WE/pub?gid=311190299&single=true&output=csv';
   const TG = 'https://t.me/AndresBurmachenko';
   const VIBER = 'viber://chat?number=%2B380954117082';
   const PAGE = 24;
@@ -132,6 +133,102 @@
     return { docName: e.n, desc: e.d, category: e.c, telegram: e.t, image: e.i };
   }
 
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], cell = '', quote = false;
+    text = String(text || '').replace(/^\uFEFF/, '');
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quote) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; } else quote = false;
+        } else cell += c;
+      } else if (c === '"') quote = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+      else if (c !== '\r') cell += c;
+    }
+    row.push(cell);
+    if (row.some((x) => x !== '')) rows.push(row);
+    return rows;
+  }
+
+  const numOf = (v) => {
+    const n = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const keyOf = (b, a) => String(b || '').trim().toLowerCase() + '|' + String(a || '').trim().toLowerCase();
+
+  async function fetchSheet(url) {
+    const bust = url + (url.includes('?') ? '&' : '?') + '_=' + Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 9000);
+    try {
+      const res = await fetch(bust, { cache: 'no-store', signal: ctrl.signal });
+      if (!res.ok) return null;
+      const text = await res.text();
+      if (/^\s*</.test(text)) return null;
+      const rows = parseCsv(text);
+      return rows.length > 1 ? rows : null;
+    } catch (e) {
+      return null;
+    } finally { clearTimeout(timer); }
+  }
+
+  /** Ціни + контент напряму з опублікованих CSV Google (CORS відкритий) */
+  async function loadFromSheets() {
+    const [priceRows, contentRows] = await Promise.all([fetchSheet(SHEET_PRICES), fetchSheet(SHEET_CONTENT)]);
+    if (!priceRows) return null;
+
+    const ph = priceRows[0].map((h) => String(h).toLowerCase().trim());
+    const find = (...names) => {
+      for (const n of names) { const i = ph.findIndex((h) => h.includes(n)); if (i >= 0) return i; }
+      return -1;
+    };
+    const iB = find('бренд'), iA = find('аромат'), iP = find('олх'), iAv = find('наявн');
+
+    const content = {};
+    if (contentRows) {
+      const ch = contentRows[0].map((h) => String(h).toLowerCase().trim());
+      const cFind = (...names) => {
+        for (const n of names) { const i = ch.findIndex((h) => h.includes(n)); if (i >= 0) return i; }
+        return -1;
+      };
+      const cB = cFind('бренд'), cA = cFind('аромат'), cG = cFind('стать'), cT = cFind('тип'),
+            cD = cFind('опис'), cL = cFind('telegram'), cP = cFind('фото');
+      for (const r of contentRows.slice(1)) {
+        const b = String(r[cB] || '').trim();
+        const a = String(r[cA] || '').trim();
+        if (!b || !a) continue;
+        content[keyOf(b, a)] = {
+          gender: cG >= 0 ? String(r[cG] || '').trim() : '',
+          type: cT >= 0 ? String(r[cT] || '').trim() : '',
+          desc: cD >= 0 ? String(r[cD] || '').trim() : '',
+          tg: cL >= 0 ? String(r[cL] || '').trim() : '',
+          photo: cP >= 0 ? String(r[cP] || '').trim() : ''
+        };
+      }
+    }
+
+    const out = [];
+    for (const r of priceRows.slice(1)) {
+      const brand = String(r[iB] || '').trim();
+      const aroma = String(r[iA] || '').trim();
+      if (!brand || !aroma) continue;
+      if (iAv >= 0 && !['так', 'yes', 'true', '1'].includes(String(r[iAv] || '').trim().toLowerCase())) continue;
+      const priceMl = numOf(r[iP]);
+      if (!(priceMl > 0)) continue;
+      const c = content[keyOf(brand, aroma)] || {};
+      out.push({
+        art: '', brand, aroma, priceMl, stock: 1,
+        gender: c.gender || '', type: c.type || '', desc: c.desc || '',
+        tg: c.tg || '', image: c.photo || ''
+      });
+    }
+    if (!out.length) return null;
+    return { products: out, updated: new Date().toISOString(), live: true };
+  }
+
   async function fetchLive() {
     if (!API_URL) return null;
     const ctrl = new AbortController();
@@ -149,7 +246,9 @@
 
   async function boot() {
     try {
-      const live = await fetchLive();
+      let live = null;
+      try { live = await loadFromSheets(); } catch (e) { live = null; }
+      if (!live) live = await fetchLive();
       const [productsRes, contentRes] = await Promise.all([
         live ? Promise.resolve({ ok: true, json: async () => live }) : fetch('data.json?ts=' + Date.now(), { cache: 'no-store' }),
         fetch('content.json')
@@ -305,7 +404,10 @@
           <strong data-price="${p._id}">${money(price)}</strong>
         </div>
         <div class="vols" role="group" aria-label="Обʼєм">
-          ${CARD_VOLS.map((ml) => `<button class="vol${ml === sel ? ' active' : ''}" type="button" data-vol="${ml}" data-for="${p._id}" aria-pressed="${ml === sel}">${ml} мл</button>`).join('')}
+          ${CARD_VOLS.map((ml) => {
+          const inCart = state.cart.some((i) => i.brand === p.brand && i.aroma === p.aroma && Number(i.ml) === ml);
+          return `<button class="vol${ml === sel ? ' active' : ''}${inCart ? ' incart' : ''}" type="button" data-vol="${ml}" data-for="${p._id}" aria-pressed="${ml === sel}">${ml} мл${inCart ? '<span class="vinc">🛒</span>' : ''}</button>`;
+        }).join('')}
         </div>
         <button class="add" type="button" data-add="${p._id}">В кошик</button>
       </div>
@@ -319,8 +421,13 @@
     if (el && p) el.textContent = money(priceFor(p, ml));
     grid.querySelectorAll(`[data-for="${id}"]`).forEach((b) => {
       const on = Number(b.dataset.vol) === ml;
+      const inCart = p && state.cart.some((i) => i.brand === p.brand && i.aroma === p.aroma && Number(i.ml) === Number(b.dataset.vol));
       b.classList.toggle('active', on);
+      b.classList.toggle('incart', !!inCart);
       b.setAttribute('aria-pressed', String(on));
+      const mark = b.querySelector('.vinc');
+      if (inCart && !mark) b.insertAdjacentHTML('beforeend', '<span class="vinc">🛒</span>');
+      if (!inCart && mark) mark.remove();
     });
   }
 
@@ -390,18 +497,13 @@
 
   function addToCart(p, ml, qty) {
     if (ml < minMl(p)) ml = minMl(p);
-    const key = `${cartBase(p)}|${ml}`;
+    const base = cartBase(p);
+    const key = `${base}|${ml}|${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const unit = priceFor(p, ml);
-    let item = state.cart.find((x) => x.key === key);
-    if (item) {
-      item.qty += qty;
-      item.unit = unit;
-    } else {
-      state.cart.push({
-        key, brand: p.brand, aroma: p.aroma, ml,
-        qty, unit, image: p._image || '', base: cartBase(p)
-      });
-    }
+    state.cart.push({
+      key, brand: p.brand, aroma: p.aroma, ml,
+      qty: 1, unit, image: p._image || '', base
+    });
     saveCart();
     updateCartUI();
     showToast(`${p.brand} ${p.aroma} · ${ml} мл — у кошику`);
@@ -430,6 +532,16 @@
       sum.hidden = true;
     }
     if ($('cartDialog').open) renderCart();
+    grid.querySelectorAll('[data-for]').forEach((b) => {
+      const pid = Number(b.dataset.for);
+      const pr = state.products[pid];
+      if (!pr) return;
+      const inCart = state.cart.some((i) => i.brand === pr.brand && i.aroma === pr.aroma && Number(i.ml) === Number(b.dataset.vol));
+      const mark = b.querySelector('.vinc');
+      b.classList.toggle('incart', inCart);
+      if (inCart && !mark) b.insertAdjacentHTML('beforeend', '<span class="vinc">🛒</span>');
+      if (!inCart && mark) mark.remove();
+    });
     const has = state.cart.length > 0;
     $('clearCart').disabled = !has;
     $('clearCart').style.opacity = has ? '' : '.4';
@@ -445,6 +557,10 @@
   }
 
   function renderCart() {
+    state.cart.sort((a, b) =>
+      String(a.brand).localeCompare(String(b.brand), 'uk') ||
+      String(a.aroma).localeCompare(String(b.aroma), 'uk') ||
+      (a.ml - b.ml));
     const body = $('cartBody');
     if (!state.cart.length) {
       body.innerHTML = '<div class="cart-empty"><strong>Кошик порожній</strong>Додайте аромат і оберіть обʼєм.</div>';
@@ -467,7 +583,7 @@
           <div class="cart-aroma">${esc(x.aroma)}</div>
           <div class="cv" data-cv="${esc(x.key)}">
             <button type="button" class="cv-btn" data-vol-open="${esc(x.key)}">
-              <span>${x.ml} мл${qty > 1 ? ' × ' + qty : ''} — ${money(x.unit * qty)}</span>
+              <span>${x.ml} мл — ${money(x.unit * qty)}</span>
               <span class="cv-ar" aria-hidden="true">▾</span>
             </button>
             <div class="cv-menu" data-vol-menu="${esc(x.key)}" hidden>${items}</div>
@@ -648,15 +764,10 @@
         const p = productFor(item);
         const unit = p ? priceFor(p, ml) : item.unit;
         const base = item.base || item.key.slice(0, item.key.lastIndexOf('|'));
-        const newKey = `${base}|${ml}`;
-        const qty = Number(item.qty) || 1;
-        const dup = state.cart.find((i) => i.key === newKey && i !== item);
-        if (dup) {
-          dup.qty = (Number(dup.qty) || 1) + qty;
-          state.cart = state.cart.filter((i) => i !== item);
-        } else {
-          item.key = newKey; item.base = base; item.ml = ml; item.unit = unit;
-        }
+        item.base = base;
+        item.ml = ml;
+        item.unit = unit;
+        item.key = `${base}|${ml}|${Date.now()}`;
         saveCart(); updateCartUI();
       }
     });
