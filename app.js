@@ -38,7 +38,7 @@
     cat: 'all',
     type: 'all',
     brand: 'all',
-    sort: 'curated',
+    sort: 'brand',
     view: 'grid',
     limit: PAGE,
     selected: {},
@@ -176,9 +176,12 @@
   }
 
   /** Ціни + контент напряму з опублікованих CSV Google (CORS відкритий) */
-  async function loadFromSheets() {
-    const [priceRows, contentRows] = await Promise.all([fetchSheet(SHEET_PRICES), fetchSheet(SHEET_CONTENT)]);
+  async function loadFromSheets(onPartial) {
+    const priceP = fetchSheet(SHEET_PRICES);
+    const contentP = fetchSheet(SHEET_CONTENT);
+    const priceRows = await priceP;
     if (!priceRows) return null;
+    let contentRows = null;
 
     const ph = priceRows[0].map((h) => String(h).toLowerCase().trim());
     const find = (...names) => {
@@ -187,8 +190,9 @@
     };
     const iB = find('бренд'), iA = find('аромат'), iP = find('олх'), iAv = find('наявн');
 
-    const content = {};
-    if (contentRows) {
+    const buildList = (contentRows) => {
+      const content = {};
+      if (contentRows) {
       const ch = contentRows[0].map((h) => String(h).toLowerCase().trim());
       const cFind = (...names) => {
         for (const n of names) { const i = ch.findIndex((h) => h.includes(n)); if (i >= 0) return i; }
@@ -210,8 +214,8 @@
       }
     }
 
-    const out = [];
-    for (const r of priceRows.slice(1)) {
+      const out = [];
+      for (const r of priceRows.slice(1)) {
       const brand = String(r[iB] || '').trim();
       const aroma = String(r[iA] || '').trim();
       if (!brand || !aroma) continue;
@@ -219,14 +223,24 @@
       const priceMl = numOf(r[iP]);
       if (!(priceMl > 0)) continue;
       const c = content[keyOf(brand, aroma)] || {};
-      out.push({
-        art: '', brand, aroma, priceMl, stock: 1,
-        gender: c.gender || '', type: c.type || '', desc: c.desc || '',
-        tg: c.tg || '', image: c.photo || ''
-      });
-    }
-    if (!out.length) return null;
-    return { products: out, updated: new Date().toISOString(), live: true };
+        out.push({
+          art: '', brand, aroma, priceMl, stock: 1,
+          gender: c.gender || '', type: c.type || '', desc: c.desc || '',
+          tg: c.tg || '', image: c.photo || ''
+        });
+      }
+      return out;
+    };
+
+    // 1) швидко: тільки ціни
+    const fast = buildList(null);
+    if (fast.length && onPartial) onPartial(fast);
+    if (!fast.length) return null;
+
+    // 2) контент — коли прийде
+    contentRows = await contentP;
+    const withContent = contentRows ? buildList(contentRows) : fast;
+    return { products: withContent.length ? withContent : fast, updated: new Date().toISOString(), live: true };
   }
 
   async function fetchLive() {
@@ -244,11 +258,49 @@
     } finally { clearTimeout(timer); }
   }
 
+  const CACHE_KEY = 'freshdoze_catalog_v1';
+  const CACHE_TTL = 5 * 60 * 1000;
+
   async function boot() {
     try {
+      // миттєвий показ із кешу, поки тягнемо свіже
+      let cached = null;
+      try {
+        const rawCache = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+        if (rawCache && Array.isArray(rawCache.products) && rawCache.products.length) {
+          cached = { products: rawCache.products, updated: rawCache.updated || '', live: true };
+        }
+      } catch (e) {}
+
+      // миттєвий рендер із кешу
+      if (cached) {
+        setProducts(cached.products);
+        state.live = true;
+        state.cart = loadCart();
+        try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
+        prepareUI();
+        apply(true);
+      }
+
       let live = null;
-      try { live = await loadFromSheets(); } catch (e) { live = null; }
+      const showPartial = (prods) => {
+        try {
+          setProducts(prods);
+          state.live = true;
+          if (!state.uiReady) {
+            state.cart = loadCart();
+            try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
+            prepareUI();
+          }
+          apply(true);
+        } catch (e) {}
+      };
+      try { live = await loadFromSheets(showPartial); } catch (e) { live = null; }
       if (!live) live = await fetchLive();
+      if (!live && cached) live = cached;
+      if (live && live.products && live.products.length) {
+        try { localStorage.setItem(CACHE_KEY, JSON.stringify({ products: live.products, updated: live.updated || '' })); } catch (e) {}
+      }
       const [productsRes, contentRes] = await Promise.all([
         live ? Promise.resolve({ ok: true, json: async () => live }) : fetch('data.json?ts=' + Date.now(), { cache: 'no-store' }),
         fetch('content.json')
@@ -265,26 +317,12 @@
           state.content = { e: c.e || [], byArt: c.byArt || {}, byName: c.byName || {}, meta: c.meta || {} };
         } catch (e) { /* content optional */ }
       }
-      state.products = products
-        .filter((p) => p && p.brand && p.aroma && Math.abs(Number(p.stock) || 0) >= 0.001 && Number(p.priceMl) > 0)
-        .map((p, i) => {
-          const c = contentFor(p) || {};
-          p = { ...p, aroma: cleanAroma(p.brand, p.aroma) };
-          const cat = p.gender || c.category || '';
-          const gender = GENDERS.includes(cat) ? cat : (cat ? 'Унісекс' : '');
-          const type = p.type || (cat === 'Нішеві' ? 'Нішеві' : cat === 'Арабські' ? 'Арабські' : 'Люкс');
-          return {
-            ...p,
-            _id: i,
-            _cat: gender,
-            _type: type,
-            _desc: p.desc || c.desc || '',
-            _tg: safeUrl(p.tg, safeUrl(c.telegram, TG)),
-            _image: p.image || c.image || '',
-            _docName: c.docName || '',
-            _search: norm([p.brand, p.aroma, c.docName, gender, type].join(' '))
-          };
-        });
+      setProducts(products);
+      state.cart = loadCart();
+      try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
+      prepareUI();
+      apply(true);
+      state.ready = true;
       state.cart = loadCart();
       try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
       bind();
@@ -300,6 +338,40 @@
       empty.querySelector('.empty-text').textContent = 'Оновіть сторінку або спробуйте пізніше.';
       console.error(e);
     }
+  }
+
+  function setProducts(products) {
+    state.products = (products || [])
+      .filter((p) => p && p.brand && p.aroma && Math.abs(Number(p.stock) || 0) >= 0.001 && Number(p.priceMl) > 0)
+      .map((p, i) => {
+        const c = contentFor(p) || {};
+        const clean = { ...p, aroma: cleanAroma(p.brand, p.aroma) };
+        const cat = clean.gender || c.category || '';
+        const gender = GENDERS.includes(cat) ? cat : (cat ? 'Унісекс' : '');
+        const type = clean.type || (cat === 'Нішеві' ? 'Нішеві' : cat === 'Арабські' ? 'Арабські' : 'Люкс');
+        return {
+          ...clean,
+          _id: i,
+          _cat: gender,
+          _type: type,
+          _desc: clean.desc || c.desc || '',
+          _tg: safeUrl(clean.tg, safeUrl(c.telegram, TG)),
+          _image: clean.image || c.image || '',
+          _docName: c.docName || '',
+          _search: norm([clean.brand, clean.aroma, c.docName, gender, type].join(' '))
+        };
+      });
+  }
+
+  function prepareUI() {
+    if (state.uiReady) { buildBrands(); renderCats(); renderGrid(); return; }
+    state.uiReady = true;
+    bind();
+    buildBrands();
+    renderCats();
+    updateUpdated();
+    updateCartUI();
+    if (sortFilter) sortFilter.value = state.sort;
   }
 
   function loadCart() {
@@ -443,7 +515,7 @@
     $('productCat').textContent = [p._cat, p._type].filter(Boolean).join(' · ');
     $('productBrand').textContent = p.brand;
     $('productTitle').textContent = p.aroma;
-    $('productPriceMl').textContent = `${fmtNum(p.priceMl)} ₴ за 1 мл · флакон додається`;
+    $('productPriceMl').textContent = `${fmtNum(p.priceMl)} ₴ за 1 мл · атомайзер додається`;
     $('productDesc').textContent = p._desc || 'Опис цього аромату скоро зʼявиться.';
     const tg = $('productTg');
     tg.href = p._tg || TG;
@@ -543,8 +615,6 @@
       if (!inCart && mark) mark.remove();
     });
     const has = state.cart.length > 0;
-    $('clearCart').disabled = !has;
-    $('clearCart').style.opacity = has ? '' : '.4';
     $('copyOrder').disabled = !has;
     $('tgOrder').setAttribute('aria-disabled', String(!has));
     $('tgOrder').style.opacity = has ? '' : '.45';
@@ -595,7 +665,17 @@
         </div>
       </div>`;
     }).join('');
+    body.insertAdjacentHTML('beforeend',
+      '<div class="cart-clear-row"><button class="clear-cart-all" id="clearCart" type="button">Очистити кошик</button></div>');
     $('cartTotal').textContent = money(cartTotal());
+    const cc = $('clearCart');
+    if (cc) cc.addEventListener('click', () => {
+      if (!state.cart.length) return;
+      if (!window.confirm('Очистити кошик повністю?')) return;
+      state.cart = [];
+      saveCart(); updateCartUI();
+      showToast('Кошик очищено');
+    });
   }
 
   function orderText() {
@@ -680,7 +760,7 @@
       if (k === 'cat') { state.cat = 'all'; renderCats(); }
       if (k === 'type') { state.type = 'all'; typeFilter.value = 'all'; }
       if (k === 'brand') { state.brand = 'all'; brandFilter.value = 'all'; }
-      if (k === 'sort') { state.sort = 'curated'; sortFilter.value = 'curated'; }
+      if (k === 'sort') { state.sort = 'brand'; sortFilter.value = 'brand'; }
       apply(true);
     });
 
@@ -772,12 +852,6 @@
       }
     });
 
-    $('clearCart').addEventListener('click', () => {
-      if (!state.cart.length) return;
-      state.cart = [];
-      saveCart(); updateCartUI();
-      showToast('Кошик очищено');
-    });
 
     $('copyOrder').addEventListener('click', async () => {
       const ok = await copyText(orderText());
@@ -795,9 +869,9 @@
   }
 
   function resetAllFilters() {
-    state.query = ''; state.cat = 'all'; state.type = 'all'; state.brand = 'all'; state.sort = 'curated';
+    state.query = ''; state.cat = 'all'; state.type = 'all'; state.brand = 'all'; state.sort = 'brand';
     searchInput.value = ''; clearSearch.hidden = true;
-    brandFilter.value = 'all'; typeFilter.value = 'all'; sortFilter.value = 'curated';
+    brandFilter.value = 'all'; typeFilter.value = 'all'; sortFilter.value = 'brand';
     renderCats(); apply(true);
   }
 
