@@ -7,6 +7,7 @@
   const MIN_ML_CHEAP = 3;   // до 70 ₴/мл — від 3 мл
   const MIN_ML_PREMIUM = 2; // від 70 ₴/мл — можна 2 мл
   const PREMIUM_FROM = 70;
+  const API_URL = ''; // ← сюди URL веб-застосунку Apps Script (?api=1)
   const TG = 'https://t.me/AndresBurmachenko';
   const VIBER = 'viber://chat?number=%2B380954117082';
   const PAGE = 24;
@@ -30,6 +31,7 @@
     products: [],
     updated: '',
     demo: false,
+    live: false,
     query: '',
     cat: 'all',
     type: 'all',
@@ -128,16 +130,33 @@
     return { docName: e.n, desc: e.d, category: e.c, telegram: e.t, image: e.i };
   }
 
+  async function fetchLive() {
+    if (!API_URL) return null;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    try {
+      const res = await fetch(API_URL + (API_URL.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store', signal: ctrl.signal });
+      if (!res.ok) return null;
+      const raw = await res.json();
+      const list = (raw && raw.products) || [];
+      return list.length ? raw : null;
+    } catch (e) {
+      return null;
+    } finally { clearTimeout(timer); }
+  }
+
   async function boot() {
     try {
+      const live = await fetchLive();
       const [productsRes, contentRes] = await Promise.all([
-        fetch('data.json?ts=' + Date.now(), { cache: 'no-store' }),
+        live ? Promise.resolve({ ok: true, json: async () => live }) : fetch('data.json?ts=' + Date.now(), { cache: 'no-store' }),
         fetch('content.json')
       ]);
       if (!productsRes.ok) throw new Error('data.json ' + productsRes.status);
       const raw = await productsRes.json();
       const products = Array.isArray(raw) ? raw : (raw.products || []);
       state.updated = Array.isArray(raw) ? '' : (raw.updated || '');
+      state.live = !!live;
       state.demo = !Array.isArray(raw) && raw.demo !== false;
       if (contentRes.ok) {
         try {
@@ -636,6 +655,7 @@
   }
 
   function updateUpdated() {
+    if (state.live) { updatedEl.textContent = 'Онлайн'; updatedEl.title = 'Дані з таблиці в реальному часі'; return; }
     if (state.demo) { updatedEl.textContent = 'Демо-знімок'; updatedEl.title = 'Підключіть оновлення з CRM'; return; }
     if (!state.updated) { updatedEl.textContent = ''; return; }
     const d = new Date(state.updated);
