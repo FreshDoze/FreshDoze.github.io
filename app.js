@@ -25,6 +25,7 @@
   const clearSearch = $('clearSearch');
   const brandFilter = $('brandFilter');
   const typeFilter = $('typeFilter');
+  const priceFilter = $('priceFilter');
   const sortFilter = $('sortFilter');
   const cats = $('cats');
   const toastEl = $('toast');
@@ -37,6 +38,7 @@
     query: '',
     cat: 'all',
     type: 'all',
+    price: 'all',
     brand: 'all',
     sort: 'brand',
     view: 'grid',
@@ -323,6 +325,7 @@
       prepareUI();
       apply(true);
       state.ready = true;
+      deepLinkProduct();
       state.cart = loadCart();
       try { state.view = localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch (e) {}
       bind();
@@ -363,9 +366,28 @@
       });
   }
 
+  function renderSkeleton() {
+    const sk = $('skeleton');
+    if (!sk) return;
+    sk.innerHTML = Array.from({ length: 8 }, () => `
+      <div class="sk-card">
+        <div class="sk-media"></div>
+        <div class="sk-line w60"></div>
+        <div class="sk-line w80"></div>
+        <div class="sk-line w40"></div>
+      </div>`).join('');
+    sk.hidden = false;
+  }
+
+  function hideSkeleton() {
+    const sk = $('skeleton');
+    if (sk) sk.hidden = true;
+  }
+
   function prepareUI() {
     if (state.uiReady) { buildBrands(); renderCats(); renderGrid(); return; }
     state.uiReady = true;
+    renderSkeleton();
     bind();
     buildBrands();
     renderCats();
@@ -386,9 +408,13 @@
 
   /* ---------- filtering / rendering ---------- */
   function buildBrands() {
-    const brands = [...new Set(state.products.map((p) => p.brand))].sort((a, b) => a.localeCompare(b, 'uk'));
-    brandFilter.innerHTML = '<option value="all">Усі бренди</option>' +
-      brands.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    const counts = {};
+    state.products.forEach((p) => { counts[p.brand] = (counts[p.brand] || 0) + 1; });
+    const brands = Object.keys(counts).sort((a, b) => a.localeCompare(b, 'uk'));
+    const cur = state.brand;
+    brandFilter.innerHTML = `<option value="all">Усі бренди (${state.products.length})</option>` +
+      brands.map((b) => `<option value="${esc(b)}">${esc(b)} (${counts[b]})</option>`).join('');
+    if (cur && cur !== 'all' && counts[cur]) brandFilter.value = cur;
   }
 
   function renderCats() {
@@ -406,6 +432,12 @@
     let list = state.products;
     if (state.cat !== 'all') list = list.filter((p) => p._cat === state.cat);
     if (state.type !== 'all') list = list.filter((p) => p._type === state.type);
+    if (state.price !== 'all') {
+      const [lo, hi] = state.price.split('-');
+      const min = Number(lo) || 0;
+      const max = hi === '' ? Infinity : Number(hi);
+      list = list.filter((p) => Number(p.priceMl) >= min && Number(p.priceMl) < max);
+    }
     if (state.brand !== 'all') list = list.filter((p) => p.brand === state.brand);
     if (q) list = list.filter((p) => p._search.includes(q));
     if (state.sort === 'curated') list = list.slice().sort((a, b) => ((b._image ? 1 : 0) - (a._image ? 1 : 0)) || (hash(a.brand + a.aroma) - hash(b.brand + b.aroma)));
@@ -448,6 +480,7 @@
   }
 
   function renderGrid() {
+    hideSkeleton();
     const list = state.filtered;
     const slice = list.slice(0, state.limit);
     grid.innerHTML = slice.map(cardHtml).join('');
@@ -504,11 +537,31 @@
   }
 
   /* ---------- product modal ---------- */
+  function deepLinkProduct() {
+    const q = new URLSearchParams(location.search);
+    const b = (q.get('b') || '').trim();
+    const a = (q.get('a') || '').trim();
+    if (b && a) {
+      const p = state.products.find((x) =>
+        norm(x.brand) === norm(b) && norm(x.aroma) === norm(a));
+      if (p) { openProduct(p._id); return true; }
+    }
+    const pid = Number(q.get('p'));
+    if (Number.isFinite(pid) && state.products[pid]) { openProduct(pid); return true; }
+    return false;
+  }
+
   function openProduct(id) {
     const p = state.products[id];
     if (!p) return;
     const sel = Math.max(state.selected[id] || 3, minMl(p));
     state.modal = { id, vol: sel };
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set('b', p.brand);
+      u.searchParams.set('a', p.aroma);
+      history.replaceState(null, '', u);
+    } catch (e) {}
     $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
     const pm = $('productMedia').querySelector('img');
     pm.addEventListener('error', () => { pm.src = 'images/placeholder.svg'; }, { once: true });
@@ -680,10 +733,36 @@
 
   function orderText() {
     if (!state.cart.length) return '';
-    const lines = state.cart.map((x) =>
-      `• ${x.brand} ${x.aroma} — ${x.ml} мл × ${x.qty} = ${money(x.unit * x.qty)}`
-    );
-    return `Доброго дня! Хочу замовити:\n\n${lines.join('\n')}\n\nРазом: ${money(cartTotal())}`;
+    const items = state.cart.slice().sort((a, b) =>
+      String(a.brand).localeCompare(String(b.brand), 'uk') ||
+      String(a.aroma).localeCompare(String(b.aroma), 'uk') || (a.ml - b.ml));
+
+    let totalMl = 0, tara = 0, sum = 0;
+    const blocks = items.map((x) => {
+      const unit = Number(x.unit) || 0;
+      totalMl += Number(x.ml) || 0;
+      tara += BOTTLES[x.ml] || 0;
+      sum += unit;
+      const { name, concentration } = splitConcentration(x.aroma);
+      const title = `${x.brand} ${name}`.trim() + (concentration ? ` (${concentration})` : '');
+      return `${title}\n${x.ml} мл — ${Math.round(unit)} грн`;
+    });
+
+    return blocks.join('\n\n') +
+      `\n\nЗагалом у замовленні: ${fmtNum(totalMl)} мл\n` +
+      `Тара: ${Math.round(tara)} грн\n` +
+      `До сплати: ${Math.round(sum)} грн`;
+  }
+
+  /** «Парфумована вода» з назви → окремо */
+  function splitConcentration(aroma) {
+    const re = /\s*[,(]?\s*(парфумована вода|туалетна вода|парфуми|одеколон|екстракт)\s*\)?\s*$/i;
+    const m = String(aroma || '').match(re);
+    if (!m) return { name: String(aroma || '').trim(), concentration: '' };
+    return {
+      name: String(aroma).replace(re, '').trim(),
+      concentration: m[1].toLowerCase()
+    };
   }
 
   /* ---------- copy / toast ---------- */
@@ -710,15 +789,19 @@
   }
 
   let toastTimer = null;
-  function showToast(text) {
-    toastEl.textContent = text;
-    toastEl.classList.add('show');
+  function showToast(text, kind) {
+    toastEl.innerHTML = (kind === 'ok'
+      ? '<svg class="toast-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.2 4.3L19 7"/></svg>'
+      : '') + '<span>' + esc(text) + '</span>';
+    toastEl.className = 'toast show' + (kind ? ' ' + kind : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
   }
 
   /* ---------- events ---------- */
   function bind() {
+    if (state.bound) return;
+    state.bound = true;
     let searchTimer = null;
     searchInput.addEventListener('input', () => {
       clearSearch.hidden = !searchInput.value;
@@ -746,6 +829,7 @@
 
     brandFilter.addEventListener('change', () => { state.brand = brandFilter.value; apply(true); });
     typeFilter.addEventListener('change', () => { state.type = typeFilter.value; apply(true); });
+    priceFilter.addEventListener('change', () => { state.price = priceFilter.value; apply(true); });
     sortFilter.addEventListener('change', () => { state.sort = sortFilter.value; apply(true); });
     moreBtn.addEventListener('click', () => { state.limit += PAGE; renderGrid(); });
 
@@ -759,6 +843,7 @@
       if (k === 'query') { searchInput.value = ''; clearSearch.hidden = true; state.query = ''; }
       if (k === 'cat') { state.cat = 'all'; renderCats(); }
       if (k === 'type') { state.type = 'all'; typeFilter.value = 'all'; }
+      if (k === 'price') { state.price = 'all'; priceFilter.value = 'all'; }
       if (k === 'brand') { state.brand = 'all'; brandFilter.value = 'all'; }
       if (k === 'sort') { state.sort = 'brand'; sortFilter.value = 'brand'; }
       apply(true);
@@ -826,7 +911,8 @@
       const open = e.target.closest('[data-vol-open]');
       if (open) {
         const key = open.dataset.volOpen;
-        const menu = $('cartBody').querySelector(`[data-vol-menu="${CSS.escape(key)}"]`);
+        const menu = Array.from($('cartBody').querySelectorAll('[data-vol-menu]'))
+          .find((m) => m.dataset.volMenu === key);
         const wasHidden = menu && menu.hidden;
         $('cartBody').querySelectorAll('[data-vol-menu]').forEach((m) => { m.hidden = true; });
         if (menu) {
@@ -855,12 +941,12 @@
 
     $('copyOrder').addEventListener('click', async () => {
       const ok = await copyText(orderText());
-      showToast(ok ? 'Замовлення скопійовано' : 'Не вдалося скопіювати');
+      showToast(ok ? 'Замовлення скопійовано' : 'Не вдалося скопіювати', ok ? 'ok' : '');
     });
     $('viberOrder').addEventListener('click', async (e) => {
       if (!state.cart.length) { e.preventDefault(); return; }
       await copyText(orderText());
-      showToast('Текст скопійовано. Вставте у Viber.');
+      showToast('Текст скопійовано — вставте у Viber', 'ok');
     });
     $('tgOrder').addEventListener('click', (e) => {
       if (!state.cart.length) { e.preventDefault(); return; }
@@ -871,7 +957,7 @@
   function resetAllFilters() {
     state.query = ''; state.cat = 'all'; state.type = 'all'; state.brand = 'all'; state.sort = 'brand';
     searchInput.value = ''; clearSearch.hidden = true;
-    brandFilter.value = 'all'; typeFilter.value = 'all'; sortFilter.value = 'brand';
+    brandFilter.value = 'all'; typeFilter.value = 'all'; priceFilter.value = 'all'; state.price = 'all'; sortFilter.value = 'brand';
     renderCats(); apply(true);
   }
 
