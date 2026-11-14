@@ -278,6 +278,14 @@ dialog[open]::backdrop{animation:bdIn .2s var(--ease) both}
 .product-layout{display:grid;grid-template-columns:minmax(0,42%) minmax(0,1fr);height:min(760px,92dvh);width:100%;flex:1 1 auto}
 .product-media{background:#fff;min-height:0;display:flex;align-items:center;justify-content:center;padding:22px;position:relative}
 .product-media img{width:100%;height:100%;object-fit:contain;padding:0}
+.gal{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.gal-img{transition:opacity .19s var(--ease-out,ease)}
+.gal-dots{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;gap:6px}
+.gal-dot{width:6px;height:6px;border-radius:50%;border:0;background:#d8d8d4;padding:0;cursor:pointer;transition:background .18s var(--ease),width .18s var(--ease)}
+.gal-dot.on{background:var(--accent);width:16px;border-radius:3px}
+.modal-notes{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.notes-l{font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);align-self:center;margin-right:2px}
+.note{font-size:10.5px;font-weight:600;color:#4a4a45;background:#f4f4f1;border-radius:20px;padding:4px 9px}
 .product-panel{position:relative;min-height:0;display:flex;flex-direction:column;background:var(--surface)}
 .product-close{position:absolute;top:12px;right:12px;z-index:3;background:#fff}
 .share-btn{

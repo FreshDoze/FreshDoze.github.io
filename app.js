@@ -155,6 +155,17 @@
     return rows;
   }
 
+  function splitPhotos() {
+    const out = [];
+    for (let i = 0; i < arguments.length; i++) {
+      String(arguments[i] || '')
+        .split(/[\n,;]+/)
+        .map((x) => x.trim())
+        .forEach((u) => { if (u && !/^javascript:/i.test(u) && out.indexOf(u) < 0) out.push(u); });
+    }
+    return out;
+  }
+
   const numOf = (v) => {
     const n = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.'));
     return Number.isFinite(n) ? n : 0;
@@ -202,6 +213,8 @@
       };
       const cB = cFind('бренд'), cA = cFind('аромат'), cG = cFind('стать'), cT = cFind('тип'),
             cD = cFind('опис'), cL = cFind('telegram'), cP = cFind('фото');
+      const cExact = (name) => ch.findIndex((h) => h === name);
+      const cP2 = cExact('фото 2'), cP3 = cExact('фото 3'), cN = cFind('нот');
       for (const r of contentRows.slice(1)) {
         const b = String(r[cB] || '').trim();
         const a = String(r[cA] || '').trim();
@@ -211,7 +224,10 @@
           type: cT >= 0 ? String(r[cT] || '').trim() : '',
           desc: cD >= 0 ? String(r[cD] || '').trim() : '',
           tg: cL >= 0 ? String(r[cL] || '').trim() : '',
-          photo: cP >= 0 ? String(r[cP] || '').trim() : ''
+          photo: cP >= 0 ? String(r[cP] || '').trim() : '',
+          photo2: cP2 >= 0 ? String(r[cP2] || '').trim() : '',
+          photo3: cP3 >= 0 ? String(r[cP3] || '').trim() : '',
+          notes: cN >= 0 ? String(r[cN] || '').trim() : ''
         };
       }
     }
@@ -225,10 +241,12 @@
       const priceMl = numOf(r[iP]);
       if (!(priceMl > 0)) continue;
       const c = content[keyOf(brand, aroma)] || {};
+        const photos = splitPhotos(c.photo, c.photo2, c.photo3);
         out.push({
           art: '', brand, aroma, priceMl, stock: 1,
           gender: c.gender || '', type: c.type || '', desc: c.desc || '',
-          tg: c.tg || '', image: c.photo || ''
+          tg: c.tg || '', image: photos[0] || c.photo || '',
+          images: photos, notes: c.notes || ''
         });
       }
       return out;
@@ -376,7 +394,9 @@
           _type: type,
           _desc: clean.desc || c.desc || '',
           _tg: safeUrl(clean.tg, safeUrl(c.telegram, TG)),
-          _image: clean.image || c.image || '',
+          _image: (clean.images && clean.images[0]) || clean.image || c.image || '',
+          _images: (clean.images && clean.images.length ? clean.images : (clean.image ? [clean.image] : (c.image ? [c.image] : []))),
+          _notes: clean.notes || c.notes || '',
           _docName: c.docName || '',
           _search: norm([clean.brand, clean.aroma, c.docName, gender, type].join(' '))
         };
@@ -588,9 +608,8 @@
     if (!p) return;
     const sel = Math.max(state.selected[id] || 3, minMl(p));
     state.modal = { id, vol: sel };
-    $('productMedia').innerHTML = `<img src="${esc(p._image || 'images/placeholder.svg')}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>`;
-    const pm = $('productMedia').querySelector('img');
-    pm.addEventListener('error', () => { pm.src = 'images/placeholder.svg'; }, { once: true });
+    renderGallery(p);
+    renderNotes(p);
     $('productCat').textContent = [p._cat, p._type].filter(Boolean).join(' · ');
     $('productBrand').textContent = p.brand;
     $('productTitle').textContent = p.aroma;
@@ -608,6 +627,71 @@
     document.body.classList.add('locked');
     fitViewport();
     $('closeProduct').focus({ preventScroll: true });
+  }
+
+  function noteList(raw) {
+    return String(raw || '')
+      .split(/[\n;,•·\/]+/)
+      .map((x) => x.trim().replace(/^[-–—\s]+/, ''))
+      .filter((x) => x.length > 1 && x.length < 40)
+      .slice(0, 14);
+  }
+
+  function renderNotes(p) {
+    const box = $('productNotes');
+    const list = noteList(p._notes);
+    if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<span class="notes-l">Ноти</span>' +
+      list.map((n) => `<span class="note">${esc(n)}</span>`).join('');
+  }
+
+  function renderGallery(p) {
+    const imgs = (p._images && p._images.length) ? p._images.slice(0, 4) : ['images/placeholder.svg'];
+    state.gal = { i: 0, imgs };
+    const media = $('productMedia');
+    media.innerHTML = `<div class="gal" data-gal>
+        <img class="gal-img" src="${esc(imgs[0])}" alt="${esc(p.brand + ' ' + p.aroma)}" data-ph>
+      </div>` +
+      (imgs.length > 1
+        ? `<div class="gal-dots" data-dots>${imgs.map((_, i) => `<button type="button" class="gal-dot${i === 0 ? ' on' : ''}" data-dot="${i}" aria-label="Фото ${i + 1}"></button>`).join('')}</div>`
+        : '');
+    const img = media.querySelector('.gal-img');
+    img.addEventListener('error', () => { img.src = 'images/placeholder.svg'; }, { once: true });
+
+    if (imgs.length > 1) {
+      const gal = media.querySelector('[data-gal]');
+      let x0 = null, y0 = null;
+      gal.addEventListener('pointerdown', (e) => { x0 = e.clientX; y0 = e.clientY; });
+      gal.addEventListener('pointerup', (e) => {
+        if (x0 === null) return;
+        const dx = e.clientX - x0, dy = e.clientY - y0;
+        x0 = null;
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) setGallery(state.gal.i + (dx < 0 ? 1 : -1));
+      });
+      media.querySelectorAll('[data-dot]').forEach((b) => {
+        b.addEventListener('click', () => setGallery(Number(b.dataset.dot)));
+      });
+    }
+  }
+
+  function setGallery(i) {
+    if (!state.gal) return;
+    const n = state.gal.imgs.length;
+    const next = ((i % n) + n) % n;
+    if (next === state.gal.i) return;
+    state.gal.i = next;
+    const img = $('productMedia').querySelector('.gal-img');
+    if (!img) return;
+    img.style.opacity = '0';
+    const src = state.gal.imgs[next];
+    const pre = new Image();
+    pre.onload = () => { img.src = src; img.style.opacity = '1'; };
+    pre.onerror = () => { img.src = 'images/placeholder.svg'; img.style.opacity = '1'; };
+    pre.src = src;
+    $('productMedia').querySelectorAll('[data-dot]').forEach((b) => {
+      b.classList.toggle('on', Number(b.dataset.dot) === next);
+    });
   }
 
   function renderModalVols() {
@@ -1054,4 +1138,3 @@
 
   boot();
 })();
-
