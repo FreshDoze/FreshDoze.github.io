@@ -170,6 +170,12 @@
     const n = Number(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.'));
     return Number.isFinite(n) ? n : 0;
   };
+  const slugOf = (str) => String(str || '')
+    .toLowerCase()
+    .replace(/[\u2019'`]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+
   const keyOf = (b, a) => String(b || '').trim().toLowerCase() + '|' + String(a || '').trim().toLowerCase();
 
   async function fetchSheet(url) {
@@ -597,9 +603,22 @@
         norm(x.brand) === norm(b) && norm(x.aroma) === norm(a));
       if (p) { openProduct(p._id); return true; }
     }
-    const rawP = q.get('p');
-    const pid = rawP === null || rawP === '' ? NaN : Number(rawP);
-    if (Number.isFinite(pid) && state.products[pid]) { openProduct(pid); return true; }
+    const rawP = (q.get('p') || '').trim();
+    if (rawP) {
+      if (/^\d+$/.test(rawP)) {
+        const pid = Number(rawP);
+        if (state.products[pid]) { openProduct(pid); return true; }
+      } else {
+        const want = slugOf(decodeURIComponent(rawP));
+        const hit = state.products.find((x) => slugOf(x.brand + ' ' + x.aroma) === want);
+        if (hit) { openProduct(hit._id); return true; }
+      }
+    }
+    // не знайшли за b/a — спробуємо за назвою аромату
+    if (a) {
+      const onlyAroma = state.products.find((x) => slugOf(x.aroma) === slugOf(a));
+      if (onlyAroma) { openProduct(onlyAroma._id); return true; }
+    }
     return false;
   }
 
@@ -844,8 +863,9 @@
   function orderText() {
     if (!state.cart.length) return '';
     const items = state.cart.slice().sort((a, b) =>
+      (Number(a.ml) - Number(b.ml)) ||
       String(a.brand).localeCompare(String(b.brand), 'uk') ||
-      String(a.aroma).localeCompare(String(b.aroma), 'uk') || (a.ml - b.ml));
+      String(a.aroma).localeCompare(String(b.aroma), 'uk'));
 
     let totalMl = 0, tara = 0, sum = 0;
     const blocks = items.map((x) => {
@@ -858,7 +878,7 @@
       return `${title}\n${x.ml} мл — ${Math.round(unit)} грн`;
     });
 
-    return 'Хочу замовити:\n\n' + blocks.join('\n\n') +
+    return 'Вітаю! Хочу замовити:\n\n' + blocks.join('\n\n') +
       `\n\nЗагалом у замовленні: ${fmtNum(totalMl)} мл\n` +
       `Тара: ${Math.round(tara)} грн\n` +
       `До сплати: ${Math.round(sum)} грн`;
@@ -1008,8 +1028,7 @@
       if (!state.modal) return;
       const p = state.products[state.modal.id];
       if (!p) return;
-      const url = location.origin + location.pathname +
-        '?b=' + encodeURIComponent(p.brand) + '&a=' + encodeURIComponent(p.aroma);
+      const url = location.origin + location.pathname + '?p=' + slugOf(p.brand + ' ' + p.aroma);
       const title = `${p.brand} ${p.aroma}`;
       const text = `${title} — Freshdoze`;
       try {
